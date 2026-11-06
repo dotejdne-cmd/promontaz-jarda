@@ -1,4 +1,6 @@
 {
+  "_readme": "Sdílený config pro v2 (dist/jarda.min.js) i v3 (dist/3.x). Klíče intents a search_replace čte i v2 – neměnit jejich tvar. Další pravidla v3 jsou v config.app.json (stahuje se až při otevření).",
+  "enabled": true,
   "version": 1,
   "name": "Jarda",
   "role": "Virtuální poradce",
@@ -6,20 +8,17 @@
   "whatsapp": "420722792670",
   "index_url": "https://dotejdne-cmd.github.io/promontaz-search/index.json",
   "formsubmit_endpoint": "https://formsubmit.co/info@promontaz.cz",
-
   "links": {
     "doprava": "https://www.promontaz.cz/doprava-platba/",
     "kalkulacky": "https://www.promontaz.cz/kalkulacky/",
     "nacenit": "https://www.promontaz.cz/nacenit-material/",
     "privacy": "https://www.promontaz.cz/podminky-ochrany-osobnich-udaju/"
   },
-
   "auto_open": {
     "enabled": true,
     "after_seconds": 20,
     "on_pageview": 2
   },
-
   "facts": {
     "min_order_czk": 450,
     "shipping_from": "133,10 Kč s DPH",
@@ -27,7 +26,6 @@
     "free_shipping_from_czk": null,
     "payment": "Platit můžete kartou online (Shoptet Pay, Apple Pay, Google Pay) nebo bankovním převodem, vše bez poplatku. Dobírku nenabízíme."
   },
-
   "texts": {
     "greeting": "Dobrý den, s čím pomůžu?",
     "teaser": "Dobrý den, s čím pomůžu? Najdu materiál nebo vám naceníme celý seznam.",
@@ -50,20 +48,71 @@
     "product_bulk": "Potřebujete větší množství? Přidám produkt do seznamu a naceníme ho.",
     "cart_missing": "Do minimální objednávky chybí {x}.",
     "whatsapp_message": "Dobrý den, píšu z webu promontaz.cz.",
-    "no_auto": "Neotevírat automaticky"
+    "no_auto": "Neotevírat automaticky",
+    "teaser_product": "Potřebujete větší množství? Naceníme ho, i s dalším materiálem.",
+    "teaser_category": "Hledáte konkrétní rozměr? Najdu ho, nebo vám naceníme celý seznam."
   },
-
   "search_replace": {
     "turbošroub": "turbo šroub",
     "turbošrouby": "turbo šrouby",
     "turbošroubů": "turbo šroubů",
     "pu pěna": "pur pěna"
   },
-
   "intents": {
-    "doprava": ["doprava", "dopravu", "poštovné", "dodání", "dodat", "dodáte", "doručení", "doručit", "zásilka", "PPL", "DPD", "výdejní", "kdy dorazí", "kolik stojí doprava"],
-    "platba": ["platba", "platit", "zaplatit", "kartou", "převodem", "dobírka", "dobírku"],
-    "naceneni": ["faktura", "fakturu", "IČO", "velkoodběr", "velkoobchod", "větší množství", "nacenit", "nacenění", "nabídka", "nabídku", "poptávka", "množstevní"],
-    "clovek": ["člověk", "člověka", "operátor", "zavolat", "zavolejte", "mluvit", "kolega", "WhatsApp", "obchodník"]
+    "doprava": [
+      "doprava",
+      "dopravu",
+      "poštovné",
+      "dodání",
+      "dodat",
+      "dodáte",
+      "doručení",
+      "doručit",
+      "zásilka",
+      "PPL",
+      "DPD",
+      "výdejní",
+      "kdy dorazí",
+      "kolik stojí doprava"
+    ],
+    "platba": [
+      "platba",
+      "platit",
+      "zaplatit",
+      "kartou",
+      "převodem",
+      "dobírka",
+      "dobírku"
+    ],
+    "naceneni": [
+      "faktura",
+      "fakturu",
+      "IČO",
+      "velkoodběr",
+      "velkoobchod",
+      "větší množství",
+      "nacenit",
+      "nacenění",
+      "nabídka",
+      "nabídku",
+      "poptávka",
+      "množstevní"
+    ],
+    "clovek": [
+      "člověk",
+      "člověka",
+      "operátor",
+      "zavolat",
+      "zavolejte",
+      "mluvit",
+      "kolega",
+      "WhatsApp",
+      "obchodník"
+    ]
+  },
+  "ga4_send_to": "GA4",
+  "context": {
+    "teaser_on_cart": false,
+    "cart_quote_chip": true
   }
 }

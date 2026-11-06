@@ -1,0 +1,292 @@
+{
+  "_readme": "Pravidla a texty Jardy v3, které se stahují až při otevření Jardy (stránku nezatěžují). Základ (kontakty, fakta o dopravě, texty v2) je v config.json.",
+  "contact": {
+    "phone": "+420722792670",
+    "phone_label": "722 792 670",
+    "email": "info@promontaz.cz",
+    "account_orders": "https://www.promontaz.cz/klient/objednavky/"
+  },
+  "thumb_base": "https://www.promontaz.cz/user/shop/related/",
+  "cart_add": {
+    "enabled": true,
+    "confirm_timeout_ms": 6000
+  },
+  "quote": {
+    "max_files": 10,
+    "max_total_mb": 10,
+    "formats": [
+      "pdf",
+      "xlsx",
+      "csv",
+      "jpg",
+      "jpeg",
+      "png"
+    ],
+    "deadlines": {
+      "": "Neuvedeno",
+      "asap": "Co nejdříve",
+      "1w": "Do 1 týdne",
+      "2w": "Do 2 týdnů",
+      "1m": "Do měsíce"
+    },
+    "unconfirmed_after_s": 20
+  },
+  "texts_v3": {
+    "results_partial": "Přesně pro „{q}“ nic nevidím. Slovo „{w}“ v katalogu nenacházím.",
+    "partial_btn": "Ukázat výsledky jen pro „{q}“ ({n})",
+    "partial_note": "Výsledky bez „{w}“ – zkontrolujte, že odpovídají tomu, co potřebujete.",
+    "no_results_quote": "Naceníme to i tak. Přidejte dotaz do seznamu, nebo pošlete fotku či seznam.",
+    "price_note": "Ceny jsou s DPH podle e-shopu. Sklad a termín potvrdí obchodník.",
+    "cart_added": "Přidáno do košíku.",
+    "cart_failed": "Do košíku se to nepodařilo vložit. Otevřete prosím produkt a vložte ho tam.",
+    "variant_hint": "Produkt má varianty – vyberte je na stránce produktu.",
+    "set_title": "Sada podle popisu obsahuje:",
+    "set_none": "U této sady jsem v katalogu nenašel samostatné komponenty.",
+    "cart_quote": "Velký nákup? Pošlete košík k nacenění, obchodník se ozve s nabídkou.",
+    "order_status": "Stav objednávky uvidíte po přihlášení v zákaznickém účtu. Nakupovali jste bez registrace? Napište nám číslo objednávky a kolega vám pomůže.",
+    "invoice": "S fakturou nebo dokladem k existující objednávce vám pomůže kolega. Napište prosím číslo objednávky.",
+    "b2b": "Pro firmy naceníme větší množství i celý seznam. Do poptávky můžete doplnit IČO, PSČ a termín.",
+    "contact": "Kolegové jsou na WhatsAppu, telefonu i e-mailu.",
+    "clarify": "Upřesněte prosím, s čím pomoct:",
+    "mixed": "Chcete spíš poradit s tímto?",
+    "quote_title": "Poptávka k nacenění",
+    "quote_short": "Stačí seznam nebo fotka a kontakt. Cenu i dostupnost potvrdí obchodník, odesláním nevzniká objednávka.",
+    "quote_accepted": "Děkujeme, poptávku č. {id} jsme přijali. Ozveme se obvykle do 24 hodin.",
+    "quote_unconfirmed": "Poptávka č. {id} se možná neodeslala (stránka se nevrátila z odesílací služby). Seznam máte uložený – zkuste ji odeslat znovu, nebo nám napište.",
+    "draft_restored": "Obnovil jsem rozepsanou poptávku.",
+    "offline": "Nejste připojeni k internetu. Seznam zůstane uložený, odešlete ho po připojení."
+  },
+  "intent_rules": {
+    "doprava": {
+      "phrases": [
+        "kolik stojí doprava",
+        "cena dopravy",
+        "cena poštovného",
+        "doprava zdarma",
+        "kdy dorazí",
+        "kdy to přijde",
+        "doba dodání",
+        "výdejní místo",
+        "na výdejní místo",
+        "na adresu",
+        "osobní odběr"
+      ],
+      "words": [
+        "doprava",
+        "dopravu",
+        "dopravy",
+        "poštovné",
+        "doručení",
+        "doručit",
+        "dodání",
+        "dodat",
+        "dodáte",
+        "zásilka",
+        "zásilku",
+        "PPL",
+        "DPD",
+        "výdejní",
+        "balíkovna",
+        "expedice",
+        "odběr"
+      ]
+    },
+    "platba": {
+      "phrases": [
+        "platba kartou",
+        "zaplatit kartou",
+        "platba převodem",
+        "na dobírku"
+      ],
+      "words": [
+        "platba",
+        "platbu",
+        "platit",
+        "zaplatit",
+        "zaplatím",
+        "kartou",
+        "převodem",
+        "dobírka",
+        "dobírku",
+        "Apple Pay",
+        "Google Pay"
+      ]
+    },
+    "objednavka": {
+      "phrases": [
+        "moje objednávka",
+        "stav objednávky",
+        "číslo objednávky",
+        "kde je moje",
+        "kdy přijde moje",
+        "zrušit objednávku",
+        "změnit objednávku",
+        "vrácení zboží",
+        "vrátit zboží"
+      ],
+      "words": [
+        "objednávka",
+        "objednávky",
+        "objednávku",
+        "objednal",
+        "objednala",
+        "reklamace",
+        "reklamovat",
+        "storno",
+        "stornovat",
+        "vrácení"
+      ]
+    },
+    "faktura": {
+      "phrases": [
+        "kopie faktury",
+        "kopii faktury",
+        "daňový doklad",
+        "poslat fakturu",
+        "faktura k objednávce",
+        "opravit fakturu",
+        "chybná faktura"
+      ],
+      "words": [
+        "faktura",
+        "faktury",
+        "doklad",
+        "dobropis"
+      ]
+    },
+    "b2b": {
+      "phrases": [
+        "na fakturu",
+        "se splatností",
+        "větší množství",
+        "velké množství",
+        "pro firmu",
+        "na firmu",
+        "na IČO",
+        "cenová nabídka",
+        "cenovou nabídku",
+        "nacenit seznam",
+        "množstevní sleva",
+        "velkoodběr",
+        "pravidelný odběr",
+        "výkaz výměr"
+      ],
+      "words": [
+        "IČO",
+        "velkoodběr",
+        "velkoobchod",
+        "nacenit",
+        "nacenění",
+        "naceňte",
+        "nabídka",
+        "nabídku",
+        "poptávka",
+        "poptávku",
+        "poptat",
+        "množstevní",
+        "splatnost",
+        "splatností",
+        "výkaz",
+        "firma",
+        "firmu"
+      ]
+    },
+    "clovek": {
+      "phrases": [
+        "mluvit s člověkem",
+        "s obchodníkem",
+        "zavolejte mi",
+        "chci poradit",
+        "s technikem",
+        "živý člověk"
+      ],
+      "words": [
+        "člověk",
+        "člověka",
+        "člověkem",
+        "operátor",
+        "obchodník",
+        "obchodníka",
+        "zavolat",
+        "zavolejte",
+        "WhatsApp",
+        "poradit",
+        "poraďte",
+        "technik",
+        "kontakt",
+        "telefon",
+        "telefonu"
+      ]
+    }
+  },
+  "synonyms": {
+    "_zdroj": "Převzato ze schváleného seznamu promontaz-search v3 – jen technicky rovnocenné výrazy.",
+    "dibl": [
+      "hmozdinka"
+    ],
+    "dible": [
+      "hmozdinka"
+    ],
+    "sdk": [
+      "sadrokarton"
+    ],
+    "sadrokarton": [
+      "sdk"
+    ],
+    "zavitovka": [
+      "zavitova"
+    ],
+    "zavitovky": [
+      "zavitova"
+    ],
+    "kvh": [
+      "hranol"
+    ],
+    "hranol": [
+      "kvh"
+    ],
+    "hranoly": [
+      "kvh"
+    ],
+    "prodluzovacka": [
+      "prodluzovaci",
+      "prodluz"
+    ],
+    "prodluzovacky": [
+      "prodluzovaci",
+      "prodluz"
+    ],
+    "prodluzka": [
+      "prodluzovaci",
+      "prodluz"
+    ],
+    "dvojzasuvka": [
+      "dvojnasobna"
+    ],
+    "pozinkovan": [
+      "zinek",
+      "zb",
+      "zz"
+    ],
+    "pozink": [
+      "zinek",
+      "zb",
+      "zz"
+    ],
+    "zinkovan": [
+      "zinek"
+    ],
+    "ytong": [
+      "porobeton",
+      "plynobeton"
+    ],
+    "porobeton": [
+      "ytong",
+      "plynobeton"
+    ],
+    "plynobeton": [
+      "porobeton",
+      "ytong"
+    ]
+  }
+}

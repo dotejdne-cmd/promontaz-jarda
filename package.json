@@ -5,9 +5,15 @@
   "description": "Virtuální poradce Jarda pro promontaz.cz (vanilla JS, GitHub Pages)",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:e2e": "node test/e2e/run.cjs",
+    "perf": "node scripts/perf.cjs",
+    "check:release": "node scripts/check-release.mjs"
   },
   "devDependencies": {
-    "esbuild": "0.24.2"
-  }
+    "axe-core": "^4.10.2",
+    "esbuild": "0.24.2",
+    "playwright": "^1.63.0"
+  },
+  "version": "3.0.0"
 }

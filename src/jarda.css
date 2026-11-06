@@ -10,17 +10,7 @@
 .pmj-root :focus-visible{outline:3px solid var(--pmj-o)!important;outline-offset:2px}
 .pmj-root a{color:var(--pmj-t);text-decoration:underline}
 
-/* spouštěč */
-.pmj-root .pmj-fab{position:relative;display:block;width:64px;height:64px;padding:0;border:3px solid var(--pmj-o);border-radius:50%;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.22);cursor:pointer;overflow:visible;margin-left:auto}
-.pmj-root .pmj-fab img{display:block;width:58px;height:58px;border-radius:50%;object-fit:cover;margin:0;max-width:none}
-.pmj-root .pmj-badge{position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;padding:0 5px;border:2px solid #fff;border-radius:11px;background:var(--pmj-o);color:#fff;font:700 12px/18px Inter,Arial,sans-serif;text-align:center}
 .pmj-root.pmj-open .pmj-fab{display:none}
-
-/* bublina (automatické otevření) */
-.pmj-root .pmj-teaser{position:relative;width:min(300px,calc(100vw - 32px));margin:0 0 12px auto;padding:14px 36px 10px 14px;border-radius:14px 14px 4px 14px;background:var(--pmj-beige);box-shadow:0 8px 28px rgba(0,0,0,.18);animation:pmj-in .2s ease-out}
-.pmj-root .pmj-teaser-text{display:block;width:100%;padding:0;border:0;background:none;text-align:left;cursor:pointer;font-size:14px}
-.pmj-root .pmj-teaser-x{position:absolute;top:4px;right:4px;width:32px;height:32px;padding:0;border:0;background:none;color:var(--pmj-m);font-size:22px;cursor:pointer}
-.pmj-root .pmj-teaser-off{margin-top:6px;font-size:12px}
 
 /* panel */
 .pmj-root .pmj-panel{display:flex;flex-direction:column;width:380px;max-width:calc(100vw - 32px);height:min(620px,calc(100vh - 32px));background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.22);overflow:hidden;animation:pmj-in .2s ease-out}
@@ -66,11 +56,16 @@
 
 /* karty výsledků */
 .pmj-root .pmj-cards{display:flex;flex-direction:column;gap:8px}
-.pmj-root .pmj-card{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:10px;border-radius:10px;background:#fff}
-.pmj-root .pmj-card-name{grid-column:1/-1;font-weight:600;font-size:14px;color:var(--pmj-t)!important;text-decoration:none!important}
+.pmj-root .pmj-card{display:grid;grid-template-columns:56px 1fr;gap:8px 10px;align-items:start;padding:10px;border-radius:10px;background:#fff}
+.pmj-root .pmj-thumb{display:block;width:56px;height:56px;border-radius:6px;object-fit:contain;background:#fff;margin:0;max-width:none}
+.pmj-root .pmj-card-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pmj-root .pmj-card-name{font-weight:600;font-size:14px;line-height:1.3;color:var(--pmj-t)!important;text-decoration:none!important;word-break:break-word}
 .pmj-root .pmj-card-name:hover{text-decoration:underline!important}
-.pmj-root .pmj-price{font-weight:700;color:var(--pmj-t);font-size:14px}
-.pmj-root .pmj-add{min-height:40px;padding:8px 12px;font-size:13px;grid-column:2}
+.pmj-root .pmj-price{font-weight:700;color:var(--pmj-t);font-size:15px}
+.pmj-root .pmj-price small{font-weight:400;font-size:12px;color:var(--pmj-m)}
+.pmj-root .pmj-code{font-size:12px;color:var(--pmj-m)}
+.pmj-root .pmj-card-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.pmj-root .pmj-add{flex:1 1 auto;min-height:40px;padding:8px 12px;font-size:13px}
 
 /* seznam */
 .pmj-root .pmj-rows{display:flex;flex-direction:column;gap:6px}
@@ -95,6 +90,18 @@
 .pmj-root .pmj-send{width:100%;min-height:48px;font-size:15px}
 .pmj-root .pmj-hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;overflow:hidden}
 
+/* poptávka – doplňky v3 */
+.pmj-root .pmj-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.pmj-root .pmj-grid{grid-template-columns:1fr}}
+.pmj-root .pmj-opt{font-weight:400;color:var(--pmj-m)}
+.pmj-root .pmj-more{border:1px solid var(--pmj-line);border-radius:8px;background:#fff;padding:0 12px}
+.pmj-root .pmj-more summary{cursor:pointer;padding:12px 0;font-weight:600;font-size:13px;min-height:44px;list-style-position:inside}
+.pmj-root .pmj-more[open]{padding-bottom:12px}
+.pmj-root .pmj-more[open]>.pmj-field+.pmj-field{margin-top:10px}
+.pmj-root .pmj-files:empty{display:none}
+.pmj-root .pmj-files{display:flex;flex-direction:column;gap:4px;margin-top:-4px}
+.pmj-root .pmj-files li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 4px 4px 10px;border-radius:6px;background:#fff;font-size:13px;word-break:break-all}
+
 /* vstup */
 .pmj-root .pmj-bar{display:flex;gap:8px;margin:0;padding:10px 12px;border-top:1px solid var(--pmj-line);background:#fff}
 .pmj-root .pmj-q{flex:1;min-width:0}
@@ -103,7 +110,7 @@
 .pmj-root .pmj-foot{padding:0 12px 8px;text-align:center;background:#fff}
 
 @keyframes pmj-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.pmj-root .pmj-panel,.pmj-root .pmj-teaser{animation:none}}
+@media (prefers-reduced-motion:reduce){.pmj-root .pmj-panel{animation:none}}
 
 /* mobil: panel přes celou šířku zdola */
 @media (max-width:599px){

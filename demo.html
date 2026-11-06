@@ -3,16 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jarda – testovací stránka</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<title>Jarda v3 – testovací stránka</title>
 <style>
   /* hrubá napodobenina Merkuru, aby šlo vidět, že widget nepřebírá styly webu */
   body{margin:0;font-family:Inter,Arial,sans-serif;color:#23282d;background:#fff}
-  header.demo{background:#23282d;color:#fff;padding:12px 16px}
+  header.demo{background:#23282d;color:#fff;padding:12px 16px;line-height:2}
   header.demo a{color:#fff;margin-right:14px}
   main{max-width:960px;margin:0 auto;padding:24px 16px 160px}
-  button,input{font-size:18px;height:52px;border-radius:0;background:#ddd}
+  button,input,select{font-size:18px;height:52px;border-radius:0;background:#ddd}
   ul{margin:20px;padding:20px;list-style:square}
   a{color:#0a58ca}
   .p-code{color:#666}
@@ -20,13 +18,15 @@
   .demo-box code{background:#eee;padding:1px 4px}
 </style>
 <script>
-  // ?page=product | category | cart | cart-ok ; ?index=broken simuluje nedostupný index ; ?config=broken nedostupný config
+  // ?page=product | variant | sada | category | cart | cart-ok ; ?index=broken ; ?auto=fast ; ?nocart=1 (Shoptet API chybí)
   var q = new URLSearchParams(location.search), page = q.get('page') || 'product';
   window.dataLayer = window.dataLayer || [];
   var base = { currency: 'CZK', language: 'cs', projectId: 776629, cartInfo: { id: null, freeShipping: false, cartItems: [], getNoBillingShippingPrice: { withoutVat: 0, vat: 0, withVat: 0 } } };
-  if (page === 'product') {
+  if (page === 'product' || page === 'variant' || page === 'sada') {
     base.pageType = 'productDetail';
-    base.product = { id: 52119, hasVariants: false, code: 'HR_10075', name: 'Kramle tesařská 10x200', manufacturer: 'HASPL', priceWithVat: 52, currentCategory: 'Spojovací materiál | Tesařské kování | Kramle' };
+    base.product = page === 'sada'
+      ? { id: 108390, hasVariants: false, code: 'PM-SADA-HASPL-TESAR-KOV-1000', name: 'SADA TESAŘSKÉ KOVÁNÍ – 1 000 vrutů 4,8×35/40 + bit TX20', priceWithVat: 2190 }
+      : { id: 52119, hasVariants: page === 'variant', code: 'HR_10075', name: 'Kramle tesařská 10x200', manufacturer: 'HASPL', priceWithVat: 52 };
   } else if (page === 'category') {
     base.pageType = 'category';
   } else if (page === 'cart' || page === 'cart-ok') {
@@ -36,6 +36,11 @@
     base.cartInfo.getNoBillingShippingPrice = { withoutVat: Math.round(val / 1.21 * 100) / 100, vat: 0, withVat: val };
   }
   dataLayer.push({ shoptet: base });
+  // Simulace shoptet.cartShared.addToCart (na webu ji poskytuje Shoptet). Kód FAIL_* simuluje odmítnutí.
+  if (!q.get('nocart')) window.shoptet = { cartShared: { addToCart: function (o) {
+    window.__demoCart = (window.__demoCart || []).concat([o]);
+    if (!/^FAIL/.test(o.productCode)) setTimeout(function () { document.dispatchEvent(new Event('ShoptetCartUpdated')); }, 300);
+  } } };
   // jen pro demo: neodesílá se na FormSubmit, rovnou simuluje návrat po odeslání
   window.PMJ_CONFIG_OVERRIDE = { dry_run: true };
   if (q.get('index') === 'broken') PMJ_CONFIG_OVERRIDE.index_url = 'https://dotejdne-cmd.github.io/promontaz-search/neexistuje.json';
@@ -44,25 +49,30 @@
 </head>
 <body>
 <header class="demo">
-  <strong>Jarda demo</strong> ·
+  <strong>Jarda v3 demo</strong> ·
   <a href="?page=product">Produkt</a>
+  <a href="?page=variant">Produkt s variantami</a>
+  <a href="?page=sada">Montážní sada</a>
   <a href="?page=category">Kategorie</a>
   <a href="?page=cart">Košík pod 450 Kč</a>
   <a href="?page=cart-ok">Košík nad 450 Kč</a>
   <a href="?page=category&index=broken">Nedostupný index</a>
-  <a href="?page=category&auto=fast">Automatické otevření za 3 s</a>
+  <a href="?page=category&auto=fast">Bublina za 3 s</a>
 </header>
 <main id="page"></main>
 <script>
   var m = document.getElementById('page');
-  if (page === 'product') m.innerHTML =
+  if (page === 'product' || page === 'variant') m.innerHTML =
     '<div class="p-detail-inner-header"><h1>Kramle tesařská 10x200</h1><span class="p-code"><span class="p-code-label">Kód:</span> <span>HR_10075</span></span></div>' +
     '<form id="product-detail-form" onsubmit="return false"><p>52 Kč s DPH</p><label>Množství <input name="amount" value="12" size="4"></label> <button>Do košíku</button></form>';
+  else if (page === 'sada') m.innerHTML =
+    '<div class="p-detail-inner-header"><h1>SADA TESAŘSKÉ KOVÁNÍ – 1 000 vrutů 4,8×35/40 + bit TX20</h1></div>' +
+    '<div id="description"><p>Co přesně sada obsahuje?</p><p>1× balení po 500 ks: Vrut univerzální 4,0x40 (SKU VR_10796)</p><p>1× balení: Okenní šroub 7,5x72 (SKU VR_10280)</p><p>1× 1 ks: Bit (SKU NEEXISTUJE_1)</p></div>';
   else if (page === 'category') m.innerHTML = '<h1>Spojovací materiál</h1><ul><li>Vruty</li><li>Hmoždinky</li><li>Kramle</li></ul>';
   else m.innerHTML = '<h1>Košík</h1><p>Kramle tesařská 10x200 – ' + base.cartInfo.cartItems[0].quantity + ' ks – hodnota zboží ' + base.cartInfo.getNoBillingShippingPrice.withVat + ' Kč s DPH</p>';
   m.insertAdjacentHTML('beforeend',
-    '<div class="demo-box"><p><strong>Test:</strong> odeslání formuláře se tu nesimuluje přes FormSubmit (<code>dry_run</code>), stránka se jen vrátí s <code>?pmj_sent=…</code>.</p>' +
-    '<p>Události dataLayer se vypisují níže.</p><button type="button" id="reset">Vymazat stav widgetu</button><pre id="dl" style="white-space:pre-wrap;font-size:12px"></pre></div>');
+    '<div class="demo-box"><p><strong>Test:</strong> poptávka se v demu neodesílá přes FormSubmit (<code>dry_run</code>), stránka se jen vrátí s <code>?pmj_sent=…</code>.</p>' +
+    '<p>Události měření (dataLayer) se vypisují níže.</p><button type="button" id="reset">Vymazat stav widgetu</button><pre id="dl" style="white-space:pre-wrap;font-size:12px"></pre></div>');
   document.getElementById('reset').onclick = function () {
     [localStorage, sessionStorage].forEach(function (s) { Object.keys(s).forEach(function (k) { if (k.indexOf('pmj2_') === 0) s.removeItem(k); }); });
     location.href = location.pathname + location.search.replace(/[?&]pmj_sent=[^&]*/, '');
@@ -70,6 +80,6 @@
   var push = dataLayer.push.bind(dataLayer), out = document.getElementById('dl');
   dataLayer.push = function (o) { if (o && /^jarda_/.test(o.event || '')) out.textContent += JSON.stringify(o) + '\n'; return push(o); };
 </script>
-<script defer src="dist/jarda.min.js"></script>
+<script defer src="dist/3.0.0/jarda.min.js"></script>
 </body>
 </html>

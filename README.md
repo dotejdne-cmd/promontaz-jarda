@@ -1,86 +1,122 @@
-# Jarda: virtuální poradce pro promontaz.cz
+# Jarda: prodejní asistent ProMontaz.cz
 
-Interaktivní průvodce bez AI. Najde materiál v katalogu, sestaví seznam k nacenění a odešle poptávku i s fotkou. Na dotazy k dopravě a platbě odpovídá jen texty z `config.json`. Nahrazuje původní bublinu `promontaz-jarda.js` v1.
+Lehký průvodce nákupem bez AI a bez placených služeb. Najde materiál v katalogu (fotka, cena s DPH, kód, odkaz), vloží jednoduché produkty do košíku přes Shoptet, sestaví seznam k nacenění a odešle B2B poptávku i s přílohami. Na dotazy k dopravě, platbě, objednávkám a fakturám odpovídá jen texty z configu a odkazy. Nic si nevymýšlí: žádná skladovost, termíny, slevy ani technická doporučení.
 
-- Bez placených služeb a bez knihoven (vanilla JS + CSS). `dist/jarda.min.js` má asi 22 kB.
-- Katalog čte z indexu vyhledávání (`https://dotejdne-cmd.github.io/promontaz-search/index.json`), pouze ke čtení. Repo `promontaz-search` se nemění.
-- Poptávky jdou přes FormSubmit na `info@promontaz.cz`, stejně jako formulář na `/nacenit-material/`.
-- Hosting: GitHub Pages z větve `main`.
+| | v2 (dnes v produkci) | v3 (tato větev) |
+|---|---|---|
+| Soubor ve Shoptetu | `dist/jarda.min.js?v=2` | `dist/3.0.0/jarda.min.js` |
+| Stahuje se se stránkou | 23 kB JS (9,6 kB gzip) + config + logo 11,5 kB | zavaděč 8 kB (3,5 kB gzip) + config + logo 2,5 kB |
+| Při otevření | CSS 9 kB | aplikace s CSS 43 kB (15,5 kB gzip) + `config.app.json` |
+| Měření v GA4 | **nedorazí** (`dataLayer.push`, web nemá GTM) | `gtag('event', …, {send_to: 'GA4'})` |
 
-## Nasazení do Shoptetu
+## Nasazení (dělá majitel, po schválení)
 
-1. V Shoptetu otevřete **Vzhled a obsah → Editor → HTML kód → Zápatí**.
-2. **Smažte** řádek se starým Jardou:
+1. Sloučit větev `jarda-v3` do `main`. GitHub Pages zveřejní soubory do `dist/3.0.0/`. **Web se tím nezmění**, Zápatí pořád načítá v2.
+2. Ověřit na `https://dotejdne-cmd.github.io/promontaz-jarda/demo.html`.
+3. V Shoptetu (**Vzhled a obsah → Editor → HTML kód → Zápatí**) nahradit řádek v2:
    ```html
-   <script src="https://www.promontaz.cz/user/documents/upload/promontaz-jarda.js?v=2" defer></script>
+   <script defer src="https://dotejdne-cmd.github.io/promontaz-jarda/dist/3.0.0/jarda.min.js"></script>
    ```
-   (Nechte si ho stranou kvůli rollbacku. Když zůstanou oba, nový Jarda se nespustí, aby se widgety nepraly.)
-3. Na stejné místo vložte:
-   ```html
-   <script defer src="https://dotejdne-cmd.github.io/promontaz-jarda/dist/jarda.min.js?v=2"></script>
-   ```
-4. Uložte a otevřete web v anonymním okně.
+4. Otestovat na `https://www.promontaz.cz/?pmj=test` podle checklistu níže. V testovacím režimu má předmět e-mailu „TEST –“ a události mají `jarda_test: true`.
 
-**Rollback:** smažte řádek nového Jardy ze Zápatí. Pokud chcete zpátky starou bublinu, vraťte původní řádek z kroku 2.
+**Rollback:** v Zápatí vrátit předchozí řádek, tedy `…/dist/jarda.min.js?v=2` pro v2 nebo starší `dist/<verze>/`. Zveřejněné verze se nikdy nepřepisují (kontroluje CI), takže návrat funguje vždy.
+**Okamžité vypnutí bez Shoptetu:** v `config.json` nastavit `"enabled": false`. Projeví se do 10 minut (cache GitHub Pages), v3 se pak nezobrazí. Pro jednu stránku stačí parametr `?pmj=off`.
 
-**Test na živém webu bez zkreslení poptávek:** přidejte k adrese `?pmj=test`, např. `https://www.promontaz.cz/?pmj=test`. Předmět e-mailu pak začíná „TEST –“ a události v dataLayer mají `jarda_test: true`. E-mail se ale opravdu odešle.
+## Verzování a vydání
 
-## Úprava textů a pravidel: `config.json`
+- Kód je v `src/`. `npm run build` vytvoří `dist/<verze z package.json>/` (`jarda.min.js` = zavaděč, `jarda-app.min.js` = aplikace se styly).
+- **Každá změna kódu = nová verze** v `package.json`, tedy nový adresář a nová adresa v Zápatí. Prohlížeče tak nikdy nemíchají starý a nový kód a cache nevadí.
+- `dist/jarda.min.js` a `dist/jarda.css` jsou zmrazená v2 (kontrolní součty v `scripts/build.mjs`). Zdroj v2 je v tagu `v2.0.0`.
+- CI (`.github/workflows/test.yml`) při každém push spustí:
+  - jednotkové testy,
+  - build s rozpočty velikosti (zavaděč ≤ 4 kB gzip, aplikace ≤ 16 kB gzip),
+  - kontrolu, že `dist/` odpovídá `src/`,
+  - kontrolu, že se zveřejněné verze nezměnily (`check:release`),
+  - regresní testy v prohlížeči.
 
-Stačí upravit `config.json` v GitHubu (tužka → Commit). Žádný build není potřeba. Změna se projeví do 10 minut (cache GitHub Pages).
+## Úpravy bez programování
 
-| Klíč | Co dělá |
-|---|---|
-| `texts.*` | Všechny věty Jardy (pozdrav, bublina, hlášky hledání, poděkování…). `{n}` a `{x}` jsou čísla doplňovaná automaticky. |
-| `facts.min_order_czk` | Minimální objednávka (450). Používá se v odpovědi o dopravě a v hlášce v košíku. |
-| `facts.shipping_from` | „Doprava od…“ (133,10 Kč s DPH). |
-| `facts.cables` | Věta o kabelech jen na adresu. |
-| `facts.free_shipping_from_czk` | Doprava zdarma. Teď `null`, takže se neukazuje. Shoptet i stránka /doprava-platba/ uvádí 5 999 Kč. Pro zapnutí sem napište `5999`. |
-| `facts.payment` | Odpověď na dotazy k platbě (převzato ze stránky /doprava-platba/). |
-| `links.*` | Odkazy na dopravu, kalkulačky, nacenění a ochranu osobních údajů. |
-| `auto_open` | Automatická bublina: `enabled`, `after_seconds` (20), `on_pageview` (2. stránka v relaci). |
-| `intents` | Klíčová slova pro volný text: `doprava`, `platba`, `naceneni`, `clovek`. Stačí začátek slova; skloňování se zkracuje automaticky. Co nesedí na žádný záměr, Jarda hledá jako produkt. |
-| `search_replace` | Náhrady v hledání, např. `turbošroub` → `turbo šroub`. |
-| `whatsapp`, `logo`, `formsubmit_endpoint`, `index_url` | Kontakty a zdroje. |
+| Soubor | Co v něm je | Kdy se stahuje |
+|---|---|---|
+| `config.json` | Zapnutí/vypnutí, auto-bublina, kontakty, odkazy, fakta o dopravě a platbě, základní texty (sdílené s v2) | se stránkou (~2 kB gzip) |
+| `config.app.json` | Pravidla pro rozpoznání dotazů, synonyma, texty v3, nastavení poptávky a košíku | až při otevření Jardy |
 
-Widget si nikdy nevymýšlí dostupnost, dodací lhůty, slevy ani technické vlastnosti. Karty produktů ukazují jen název, cenu s DPH a odkaz z indexu. Sklad se nezobrazuje, protože index se staví jednou za noc.
+- `facts.*`: minimální objednávka (450 Kč), doprava od 133,10 Kč s DPH, kabely jen na adresu, platba. `free_shipping_from_czk` je `null`. Shoptet uvádí 5 999 Kč, zapne se až po potvrzení.
+- `intent_rules`: `{záměr: {phrases, words}}`. Fráze má 3 body, slovo 2 body. Jedno slovo ve věcném dotazu (např. „telefonní kabel“) zákazníka nepřesměruje: Jarda hledá produkt a záměr jen nabídne jako tlačítko.
+- `synonyms`: jen technicky rovnocenné výrazy. Převzato ze schváleného seznamu promontaz-search v3.
+- `cart_add.enabled`: tlačítko „Do košíku“ (jen produkty bez variant, viz níže).
+- `quote`: formáty a limity příloh, volby termínu.
+- `intents` a `search_replace` v `config.json` čte i v2. Jejich tvar neměňte.
 
-## Jak se chová
+## Funkce v3
 
-- **Spouštěč** vpravo dole (logo `jarda.jpg` z webu). Nezobrazuje se v pokladně (`/objednavka/`, kroky objednávky, děkovná stránka).
-- **Automatická bublina** se ukáže nejdřív po 20 s na stránce, nebo už na 2. zobrazené stránce. Nejvýš 1× za relaci (sessionStorage) a ne po ručním otevření. Odkaz „Neotevírat automaticky“ ji vypne natrvalo (localStorage `pmj2_noauto`).
-- **Úvod:** Najít materiál / Nacenit seznam nebo fotku / Spočítat spotřebu / Doprava a platba / Napsat člověku.
-- **Hledání:** index se stáhne až při prvním hledání (asi 1 MB gzip) a pak zůstává v paměti stránky (a v cache prohlížeče). Normalizace diakritiky a rozměrů (`8x200 = 8×200 = 8 x 200`, `3,5 = 3.5`). Čísla se nedoplňují (`m8 ≠ m80`). Zobrazí se 5 nejlepších výsledků. Když nic nenajde: „Tohle v katalogu nevidím, ale naceníme to. Přidat do seznamu?“
-- **Seznam k nacenění** je v localStorage (`pmj2_list`): množství, mazání, přežije přechod mezi stránkami.
-- **Nacenění:** seznam (předvyplněný), fotka nebo PDF do 10 MB, e-mail nebo telefon (aspoň jedno), poznámka a honeypot `_honey`. Odesílá se klasickým formulářem na FormSubmit (jen tak projdou přílohy). FormSubmit může ukázat kontrolu „nejste robot“ a pak vrátí zákazníka na stejnou stránku s `?pmj_sent=…`. Jarda ukáže „Děkujeme, ozveme se obvykle do 24 hodin.“ a vyprázdní seznam.
-- **Stránka produktu:** název a kód z `dataLayer` (`shoptet.product`), u variant kód z DOM (`.p-code`). Množství se vezme z pole Množství. Čip „Větší množství? Naceníme“ je první.
-- **Košík:** hláška „Do minimální objednávky chybí X Kč“. Ověřeno na živém košíku: `shoptet.cartInfo.getNoBillingShippingPrice.withVat` = hodnota zboží s DPH bez dopravy a platby (2× kramle 52 Kč → 104 → „chybí 346 Kč“). Ukáže se jen na `/kosik/`, když jsou v košíku položky. dataLayer se po změně množství přes AJAX neaktualizuje spolehlivě, proto hláška po události `ShoptetCartUpdated` zmizí. Po obnovení stránky se znovu spočítá.
-- **WhatsApp:** `https://wa.me/420722792670` s předvyplněnou zprávou, URL aktuální stránky a případně seznamem.
+**Hledání.**
+- Lokální index z promontaz-search: jen čtení, stahuje se až při prvním hledání (~1 MB gzip) a připravuje po dávkách.
+- Normalizace rozměrů, diakritiky a koncovek. Čísla se nedoplňují (`m8 ≠ m80`).
+- Řazení: přesná shoda v názvu, první slovo, vše v názvu.
+- Synonyma a vyhledání podle kódu a EAN.
+- Karta produktu: náhled 100×100 ze Shoptetu (`/user/shop/related/`), cena s DPH (u variant „od“), kód, „+ k nacenění“, „Do košíku“ nebo „Vybrat variantu“.
+- Bez výsledku: Jarda řekne, které slovo v katalogu není, a výsledky bez něj nabídne jen na kliknutí. Dotaz lze přidat k nacenění.
+- Přes 5 výsledků vede odkaz na `/vyhledavani/?string=…`.
 
-## Měření (window.dataLayer)
+**Do košíku.** Volá `shoptet.cartShared.addToCart({productCode, amount: 1})`.
+- Jen produkty bez variant a jen pokud Shoptet API na stránce existuje.
+- „✓ V košíku“ se ukáže až po události `ShoptetCartUpdated`. Jinak Jarda nabídne otevřít produkt.
+- Ověřeno na živém webu (testovací košík).
+- Kódy v indexu odpovídají kódům ve Shoptetu (namátkou ověřeno přes Shoptet API).
+
+**Rozpoznání dotazů.** Materiál, B2B nacenění, doprava, platba, existující objednávka, faktura/doklad, obchodník. U nejasného dotazu se Jarda zeptá.
+
+**Kontext stránky.**
+- Produkt: čip „Větší množství? Naceníme“ (s množstvím z pole Množství).
+- Montážní sada: „Co obsahuje sada“, pouze komponenty uvedené v popisu jako `(SKU …)`.
+- Košík: chybějící částka do minima (z dataLayer) a „Poslat košík k nacenění“.
+- Automatická bublina: max 1× za relaci, ne v košíku ani v pokladně, kontextový text, trvale vypnutelná.
+
+**B2B poptávka.**
+- Viditelná pole: seznam (předvyplněný), přílohy, e-mail nebo telefon, PSČ.
+- Pod rozbalením: IČO (s kontrolou), termín, poznámka.
+- Přílohy stejně jako ověřený formulář /nacenit-material/: PDF, XLSX, CSV, JPG, PNG, max 10 souborů a 10 MB, kontrola skutečného formátu souboru.
+- **ZIP se nepřijímá**: FormSubmit s ním ověřený není a jiný formulář na webu ho také nebere.
+
+**Spolehlivé odeslání.**
+- Odesílá se skrytý formulář. Viditelný zůstává, takže návrat tlačítkem Zpět nic nesmaže.
+- Rozepsaná poptávka se drží v `sessionStorage` (jen tato karta), seznam v `localStorage`.
+- Dvojí odeslání brání zámek tlačítka. Po návratu z bfcache (iOS) se zámek uvolní.
+- `jarda_quote_submit` = formulář odeslán. `jarda_quote_accepted` = FormSubmit poptávku přijal a vrátil zákazníka na `?pmj_sent=ID`. To **není** potvrzení doručení do schránky, to ze stránky ověřit nejde.
+- Bez návratu do 20 s: při dalším otevření Jarda upozorní („možná se neodeslala“) a seznam zůstává.
+- Obnovení stránky s `?pmj_sent` se nezapočítá dvakrát.
+
+**Osobní údaje.** E-mail, telefon, IČO ani poznámka nikdy nejdou do měření. Hledané výrazy se čistí od e-mailů a telefonních čísel. Kontakt se ukládá jen do `sessionStorage` a po přijetí se maže.
+
+## Měření (GA4)
+
+Web nemá GTM, jen gtag.js se skupinou `GA4` (`G-3KY8CWHMHY`) a Google Ads. Jarda posílá události **jen do GA4** (`send_to: 'GA4'`), nikdy do Ads. Poptávky Jardy tak nejsou nákupní konverze. Souběžně jdou i do `dataLayer` (pro případný GTM a testy).
 
 | Událost | Parametry |
 |---|---|
-| `jarda_open` | `jarda_source`: `click` / `teaser` / `quote_sent` |
-| `jarda_chip_click` | `chip`: `najit`, `nacenit`, `spotreba`, `doprava`, `clovek`, `produkt`, `neotevirat_automaticky` |
-| `jarda_search` | `query` (e-maily a telefonní čísla nahrazeny `[skryto]`), `results_count`, při výpadku indexu `index_error: true` |
-| `jarda_add_to_list` | `item_source`: `search` / `product` / `free_text` |
-| `jarda_quote_sent` | `lead_id` (PM-RRMMDD-J…), `items_count`, `has_attachment`. Posílá se **až po návratu z FormSubmitu**, ne po kliknutí. |
-| `jarda_whatsapp` | `list_count` |
+| `jarda_open` | `jarda_source` (click/teaser/quote_accepted), `page_type` |
+| `jarda_teaser_show`, `jarda_noauto` | `page_type` |
+| `jarda_chip_click` | `chip`, `page_type` |
+| `jarda_intent` | `intent`, `mode` (direct/mixed/clarify) |
+| `jarda_search` | `search_term`, `results_count` (−1 = index nedostupný), `page_type` |
+| `jarda_search_no_results` | `search_term`, `missing_term` |
+| `jarda_product_click` | `item_id` (kód), `index`, `search_term` |
+| `jarda_add_to_list` | `item_source` (search/product/set/cart/free_text/partial), `list_count` |
+| `jarda_add_to_cart` | `item_id`, `result` (ok/fail) |
+| `jarda_list_view` | `list_count` |
+| `jarda_quote_start` | `list_count`, `quote_source` |
+| `jarda_quote_submit` | `lead_id`, `items_count`, `attachments_count`, `has_zip`, `has_ico`, `quote_source` |
+| `jarda_quote_accepted` | `lead_id`, `items_count`, `attachments_count` |
+| `jarda_quote_unconfirmed` | `lead_id` |
+| `jarda_whatsapp`, `jarda_contact_click` | `context`, `channel`, `list_count` |
 
-Do událostí se nikdy neposílá e-mail ani telefon. Hlavní metrika je `jarda_quote_sent`: v GTM založte trigger „Vlastní událost = jarda_quote_sent“ a z něj GA4 `generate_lead` (případně konverzi Ads s `transaction_id = lead_id`).
+Všechny události mají `jarda_version`. Postup v GA4 a návrh reportu je v [`docs/REPORT.md`](docs/REPORT.md).
 
-## Zátěž stránky
-
-- Při načtení stránky: `jarda.min.js` (~9,6 kB gzip), `config.json` (~2 kB), logo `jarda.jpg` (11 kB, stejné jako dosud). Start až po události `load` a v klidu prohlížeče (`requestIdleCallback`), takže neovlivní LCP ani první vykreslení.
-- Plné styly panelu (`jarda.css`, ~3 kB gzip) se stahují až při najetí na ikonu nebo otevření.
-- Katalog (~1 MB gzip) se stahuje jen při prvním hledání. Příprava 15 000 položek běží po dávkách, aby neblokovala stránku.
-- Ověřeno na živém promontaz.cz (Playwright): na stránce produktu přibyly jen tři výše uvedené požadavky, bez chyb v konzoli. První hledání trvalo ~0,8 s včetně stažení indexu, další ~50 ms.
-
-## Vývoj
+## Testy
 
 ```bash
-npm install
+npm ci
 ```
 ```bash
 npm test
@@ -88,49 +124,31 @@ npm test
 ```bash
 npm run build
 ```
+```bash
+npm run test:e2e
+```
+```bash
+node test/live/live.cjs
+```
+```bash
+npm run perf
+```
 
-- `src/main.js`: UI a logika, `src/search.js`: normalizace, hledání, záměry, `src/jarda.css`: styly (vše pod `.pmj-root`, třídy `.pmj-…`).
-- `dist/` se commituje. GitHub Actions kontroluje testy a že `dist/` odpovídá `src/`.
-- `demo.html`: stránka produktu, kategorie, košíku (pod a nad 450 Kč), nedostupný index, rychlá automatická bublina. Spuštění: `python3 -m http.server` a otevřít `http://localhost:8000/demo.html`. Formulář se v demu neodesílá (`dry_run`), jen simuluje návrat.
+- `npm test`: hledání a záměry, 17 testů.
+- `npm run test:e2e`: 25 scénářů v Chromiu nad `demo.html` (desktop a mobil, přístupnost axe-core, bez sítě).
+- `node test/live/live.cjs`: 11 kontrol na živém promontaz.cz. Web se nemění, poptávka se neodešle.
+- `npm run perf`: srovnání bez Jardy / v2 / v3 na živém webu.
 
-## Checklist ručního testu před nasazením
+## Checklist ručního testu před přepnutím Zápatí
 
-Testujte s `?pmj=test` a s vymazaným localStorage/sessionStorage (anonymní okno).
+Testujte s `?pmj=test` v anonymním okně.
 
-**Desktop (Chrome / Edge / Firefox)**
-- [ ] Dokud zákazník neodklikne cookie lištu Shoptetu, ikona Jardy je pod ní (lišta má přednost). Otevřený panel je nad lištou.
-- [ ] Spouštěč vpravo dole nepřekrývá tlačítko „nahoru“, cookie lištu ani košík Merkuru.
-- [ ] Klik otevře panel, kurzor je v poli. Esc a × zavřou panel a fokus se vrátí na spouštěč.
-- [ ] Tab projde čipy, tlačítka, pole i křížek ve správném pořadí s viditelným rámečkem.
-- [ ] Najít materiál: `kramle 10 x 200`, `vrut 5x60`, `CYKY 3x2,5`, `osb 18`, kód `HR_10075` vrátí správné karty s cenou s DPH a odkazem.
-- [ ] Nesmysl (`sádrokartonová deska knauf`) ukáže „Tohle v katalogu nevidím…“ a jde přidat jako text.
-- [ ] Volný text: `kolik je poštovné` → doprava, `platba kartou` → platba, `faktura na IČO` → nacenění, `chci mluvit s člověkem` → WhatsApp.
-- [ ] Seznam: přidat 2–3 položky, změnit množství, smazat, přejít na jinou stránku. Seznam zůstane.
-- [ ] Nacenit: bez kontaktu ukáže chybu. Se špatným e-mailem ukáže chybu. Soubor nad 10 MB nebo `.docx` odmítne.
-- [ ] Odeslání s fotkou (JPG) a jen s telefonem: e-mail přijde na info@promontaz.cz s předmětem „TEST – Poptávka PM-… – widget Jarda – 1 příl.“, tabulkou a přílohou. Po návratu je poděkování, seznam je prázdný a v dataLayer je `jarda_quote_sent`.
-- [ ] Odeslání jen s e-mailem: „Odpovědět“ v e-mailu míří na zákazníkův e-mail.
-- [ ] Stránka produktu: čip „Větší množství? Naceníme“ přidá produkt s množstvím z pole Množství. U produktu s variantami se vezme kód vybrané varianty.
-- [ ] Košík pod 450 Kč ukáže „Do minimální objednávky chybí X Kč“, nad 450 Kč nic. V pokladně (`/objednavka/…`) se Jarda nezobrazí.
-- [ ] Automatická bublina: po 20 s, nebo hned na 2. stránce, jen jednou za relaci. Po „Neotevírat automaticky“ už nikdy.
-- [ ] Ve starém widgetu nic nezůstalo (žádné dvě ikony vpravo dole).
-- [ ] Konzole bez chyb. Vzhled Merkuru (tlačítka, formuláře, hlavička) beze změny.
-
-**Mobil (Android Chrome)**
-- [ ] Panel přes celou obrazovku, nic nepřetéká do strany, stránka pod ním neroluje.
-- [ ] Psaní do pole nezoomuje stránku. Klávesnice nepřekryje pole ani tlačítko Odeslat.
-- [ ] Výběr fotky z fotoaparátu i galerie a odeslání.
-- [ ] Tlačítko WhatsApp otevře aplikaci s předvyplněnou zprávou a URL stránky.
-
-**Safari iOS (iPhone)**
-- [ ] Totéž co mobil. Navíc: panel sedí nad spodní lištou Safari (safe-area), × je dosažitelný.
-- [ ] Fotka z fotoaparátu (Safari ji díky omezení na JPG/PNG/PDF má převést z HEIC na JPG; pokud ne, formulář ji odmítne s hláškou).
-- [ ] Návrat z FormSubmitu ukáže poděkování (sessionStorage funguje i v anonymním panelu).
-- [ ] Odkaz na kartě produktu otevře produkt ve stejném okně a seznam po návratu zůstane.
-
-**Zpomalená síť (DevTools → Network → Slow 3G)**
-- [ ] Web se načte stejně rychle jako bez Jardy (Jarda startuje až po `load`).
-- [ ] První hledání ukáže „Hledám v katalogu…“ a výsledky přijdou do ~45 s (index ~1 MB). Druhé hledání je okamžité.
-
-**Nedostupný index** (DevTools → Network → Block request URL `index.json`)
-- [ ] Hledání ukáže „Katalog se teď nepodařilo načíst…“ s tlačítky Přidat do seznamu a WhatsApp. Nacenění funguje dál.
-- [ ] Zablokovaný `config.json`: Jarda se ukáže se základními texty, doprava odkazuje jen na stránku /doprava-platba/ (žádná čísla).
+- [ ] **Skutečná poptávka** s 1 fotkou + 1 XLSX a jen telefonem: e-mail na info@ s předmětem „TEST – Poptávka PM-… – widget Jarda – 2 příl.“, obě přílohy, tabulka polí. Po návratu poděkování a prázdný seznam.
+- [ ] Poptávka jen s e-mailem: „Odpovědět“ míří na zákazníka.
+- [ ] FormSubmit ukáže kontrolu „nejste robot“: po potvrzení návrat na stejnou stránku. Po zavření bez potvrzení a návratu Jarda ukáže „možná se neodeslala“.
+- [ ] Do košíku z výsledků u 2–3 různých produktů (vrut, kabel, chemie). Košík v hlavičce se aktualizuje.
+- [ ] iPhone (Safari): otevření, hledání s fotkami, fotka z fotoaparátu, odeslání, Zpět z FormSubmitu.
+- [ ] Android (Chrome): totéž. Klávesnice nepřekryje pole.
+- [ ] Desktop: Tab a Esc, cookie lišta (ikona pod ní, otevřený panel nad ní).
+- [ ] GA4 → Admin → DebugView s `?pmj=test`: přichází `jarda_open`, `jarda_search`, `jarda_quote_accepted`.
+- [ ] Google Ads: v Konverzích nepřibyla žádná akce z Jardy.

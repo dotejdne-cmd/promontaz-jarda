@@ -5,10 +5,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm ci
-      - run: npm test
-      - run: npm run build
+      - name: Jednotkové testy (hledání, záměry, měření)
+        run: npm test
+      - name: Build + rozpočty velikosti + zmrazená v2 + kontrola configu
+        run: npm run build
       - name: dist odpovídá src
         run: git diff --exit-code dist/ || (echo "Spusťte npm run build a commitněte dist/" && exit 1)
+      - name: Zveřejněné verze se nemění
+        run: npm run check:release
+      - name: Prohlížeč (Chromium)
+        run: npx playwright install --with-deps chromium
+      - name: Regresní testy v prohlížeči
+        run: npm run test:e2e
