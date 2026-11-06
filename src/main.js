@@ -1,5 +1,5 @@
 /* ProMontaz – virtuální poradce Jarda v2 | vložit s defer do Zápatí, nahrazuje promontaz-jarda.js v1 */
-import { buildIndex, search, detectIntent, safeQuery } from './search.js';
+import { buildIndexAsync, search, detectIntent, safeQuery } from './search.js';
 
 (function () {
   'use strict';
@@ -128,7 +128,7 @@ import { buildIndex, search, detectIntent, safeQuery } from './search.js';
   function getIndex() {
     if (!indexP) {
       if (!C.index_url) return Promise.reject(new Error('no index'));
-      indexP = fetchJSON(C.index_url, 45000).then(buildIndex);
+      indexP = fetchJSON(C.index_url, 45000).then(function (d) { return buildIndexAsync(d); });
       indexP.catch(function () { indexP = null; });
     }
     return indexP;
@@ -409,7 +409,27 @@ import { buildIndex, search, detectIntent, safeQuery } from './search.js';
   }
 
   /* ---------- otevírání / zavírání ---------- */
+  /* Plné styly (9 kB) se stahují až při prvním otevření; do té doby stačí kritické CSS ikony v JS. */
+  var cssP = null;
+  function ensureCss() {
+    if (!cssP) cssP = new Promise(function (res) {
+      var l = h('link', { rel: 'stylesheet', href: abs('jarda.css', SRC) });
+      l.onload = l.onerror = res; setTimeout(res, 4000);
+      document.head.appendChild(l);
+    });
+    return cssP;
+  }
+  var CRIT = '.pmj-root{position:fixed;right:16px;bottom:16px;z-index:9990}.pmj-root [hidden]{display:none!important}' +
+    '.pmj-root .pmj-fab{position:relative;display:block;width:64px;height:64px;margin:0 0 0 auto;padding:0;border:3px solid #E8730C;border-radius:50%;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.22);cursor:pointer}' +
+    '.pmj-root .pmj-fab img{display:block;width:58px;height:58px;max-width:none;margin:0;border-radius:50%;object-fit:cover}' +
+    '.pmj-root .pmj-badge{position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;padding:0 5px;border:2px solid #fff;border-radius:11px;background:#E8730C;color:#fff;font:700 12px/18px Inter,Arial,sans-serif;text-align:center}' +
+    '@media (max-width:599px){.pmj-root{right:12px;bottom:12px}}@media print{.pmj-root{display:none!important}}';
+
   function open(source) {
+    if (isOpen) return;
+    ensureCss().then(function () { doOpen(source); });
+  }
+  function doOpen(source) {
     hideTeaser();
     if (isOpen) return;
     isOpen = true;
@@ -435,7 +455,7 @@ import { buildIndex, search, detectIntent, safeQuery } from './search.js';
   function showTeaser() {
     if (isOpen || st('localStorage', 'noauto') || st('sessionStorage', 'auto')) return;
     st('sessionStorage', 'auto', '1');
-    teaser.hidden = false;
+    ensureCss().then(function () { if (!isOpen) teaser.hidden = false; });
   }
   function hideTeaser() { teaser.hidden = true; }
   function noAuto() {
@@ -448,7 +468,7 @@ import { buildIndex, search, detectIntent, safeQuery } from './search.js';
     var logo = abs(C.logo);
     badge = h('span', { class: 'pmj-badge', 'aria-hidden': 'true', hidden: true });
     fab = h('button', { type: 'button', class: 'pmj-fab', 'aria-label': 'Otevřít poradce ' + C.name, 'aria-expanded': 'false', 'aria-controls': 'pmj-panel',
-      onclick: function () { isOpen ? close() : open('click'); } },
+      onclick: function () { isOpen ? close() : open('click'); }, onpointerenter: ensureCss, onfocus: ensureCss },
       [h('img', { src: logo, alt: '', width: '60', height: '60', decoding: 'async' }), badge]);
 
     teaser = h('div', { class: 'pmj-teaser', hidden: true }, [
@@ -491,8 +511,7 @@ import { buildIndex, search, detectIntent, safeQuery } from './search.js';
         st('sessionStorage', 'pending', null);
         setList([]);
         track('jarda_quote_sent', { lead_id: sent, items_count: pend.n || 0, has_attachment: !!pend.f });
-        open('quote_sent');
-        say([p(T('quote_sent')), p('Číslo poptávky: ' + sent)]);
+        ensureCss().then(function () { doOpen('quote_sent'); say([p(T('quote_sent')), p('Číslo poptávky: ' + sent)]); });
         return;
       }
     }
@@ -509,16 +528,14 @@ import { buildIndex, search, detectIntent, safeQuery } from './search.js';
 
   /* ---------- start: CSS + config, pak vykreslit (nebrzdí načtení webu) ---------- */
   function start() {
-    var css = h('link', { rel: 'stylesheet', href: abs('jarda.css', SRC) });
-    var cssReady = new Promise(function (res) { css.onload = res; css.onerror = res; setTimeout(res, 4000); });
-    document.head.appendChild(css);
+    document.head.appendChild(h('style', { id: 'pmj-crit', text: CRIT }));
     var cfg = fetchJSON(abs('../config.json', SRC), 6000).then(function (j) {
       for (var k in j) {
         if (j[k] && typeof j[k] === 'object' && !Array.isArray(j[k]) && C[k] && typeof C[k] === 'object') { for (var kk in j[k]) C[k][kk] = j[k][kk]; }
         else C[k] = j[k];
       }
     }, function () {});
-    Promise.all([cssReady, cfg]).then(function () {
+    cfg.then(function () {
       var o = window.PMJ_CONFIG_OVERRIDE; // jen pro demo.html / testy
       if (o) for (var k in o) C[k] = o[k];
       render();

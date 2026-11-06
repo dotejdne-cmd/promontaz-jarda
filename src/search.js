@@ -29,9 +29,9 @@ export function tokens(s) {
 
 function codeKey(s) { return String(s || '').toLowerCase().replace(/[\s_\-./]/g, ''); }
 
-export function buildIndex(data) {
+function mkItem(data) {
   var base = data.base || '', cats = data.cats || [], manus = data.manus || [];
-  return (data.items || []).map(function (it) {
+  return function (it) {
     var cat = String(cats[it[6]] || '').split('|').pop();
     return {
       n: it[0], u: base + it[1], p: typeof it[3] === 'number' ? it[3] : null, v: !!it[8],
@@ -40,6 +40,21 @@ export function buildIndex(data) {
       nt: tokens(it[0]),
       ot: tokens([manus[it[4]] || '', cat, it[9] || ''].join(' '))
     };
+  };
+}
+
+export function buildIndex(data) { return (data.items || []).map(mkItem(data)); }
+
+/* Totéž po dávkách, aby příprava 15 000 položek neblokovala stránku (mobil). */
+export function buildIndexAsync(data, chunk) {
+  var items = data.items || [], f = mkItem(data), out = [], i = 0;
+  chunk = chunk || 1500;
+  return new Promise(function (res) {
+    (function step() {
+      var end = Math.min(items.length, i + chunk);
+      for (; i < end; i++) out.push(f(items[i]));
+      if (i < items.length) setTimeout(step, 0); else res(out);
+    })();
   });
 }
 
