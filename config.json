@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "name": "Jarda",
+  "role": "Virtuální poradce",
+  "logo": "https://www.promontaz.cz/user/documents/upload/jarda.jpg",
+  "whatsapp": "420722792670",
+  "index_url": "https://dotejdne-cmd.github.io/promontaz-search/index.json",
+  "formsubmit_endpoint": "https://formsubmit.co/info@promontaz.cz",
+
+  "links": {
+    "doprava": "https://www.promontaz.cz/doprava-platba/",
+    "kalkulacky": "https://www.promontaz.cz/kalkulacky/",
+    "nacenit": "https://www.promontaz.cz/nacenit-material/",
+    "privacy": "https://www.promontaz.cz/podminky-ochrany-osobnich-udaju/"
+  },
+
+  "auto_open": {
+    "enabled": true,
+    "after_seconds": 20,
+    "on_pageview": 2
+  },
+
+  "facts": {
+    "min_order_czk": 450,
+    "shipping_from": "133,10 Kč s DPH",
+    "cables": "Kabely posíláme jen na adresu, ne na výdejní místo.",
+    "free_shipping_from_czk": null,
+    "payment": "Platit můžete kartou online (Shoptet Pay, Apple Pay, Google Pay) nebo bankovním převodem, vše bez poplatku. Dobírku nenabízíme."
+  },
+
+  "texts": {
+    "greeting": "Dobrý den, s čím pomůžu?",
+    "teaser": "Dobrý den, s čím pomůžu? Najdu materiál nebo vám naceníme celý seznam.",
+    "input_placeholder": "Napište, co hledáte (např. vrut 5x60)",
+    "search_prompt": "Napište název, rozměr nebo kód. Například: kramle 10x200, CYKY 3x2,5, OSB 18.",
+    "loading": "Hledám v katalogu…",
+    "results": "Tohle jsem našel v katalogu:",
+    "results_more": "Výsledků je víc ({n}). Zkuste dotaz upřesnit, nebo si nechte nacenit.",
+    "no_results": "Tohle v katalogu nevidím, ale naceníme to. Přidat do seznamu?",
+    "index_error": "Katalog se teď nepodařilo načíst. Napište, co potřebujete, a my vám to naceníme.",
+    "not_listed": "Nenašli jste to? Přidejte dotaz do seznamu a naceníme ho.",
+    "added": "Přidáno do seznamu k nacenění.",
+    "list_title": "Seznam k nacenění",
+    "list_empty": "Seznam je zatím prázdný. Najděte materiál, nebo pošlete rovnou fotku či seznam ve formuláři.",
+    "quote_intro": "Pošlete nám seznam nebo fotku. Cenu i dostupnost vám potvrdí obchodník, odesláním nevzniká objednávka.",
+    "quote_sent": "Děkujeme, ozveme se obvykle do 24 hodin.",
+    "calc": "Spotřebu materiálu spočítáte v našich kalkulačkách.",
+    "shipping_title": "Doprava a platba",
+    "human": "Rád vás spojím s kolegou. Napište nám na WhatsApp, zprávu máte předvyplněnou.",
+    "product_bulk": "Potřebujete větší množství? Přidám produkt do seznamu a naceníme ho.",
+    "cart_missing": "Do minimální objednávky chybí {x}.",
+    "whatsapp_message": "Dobrý den, píšu z webu promontaz.cz.",
+    "no_auto": "Neotevírat automaticky"
+  },
+
+  "search_replace": {
+    "turbošroub": "turbo šroub",
+    "turbošrouby": "turbo šrouby",
+    "turbošroubů": "turbo šroubů",
+    "pu pěna": "pur pěna"
+  },
+
+  "intents": {
+    "doprava": ["doprava", "dopravu", "poštovné", "dodání", "dodat", "dodáte", "doručení", "doručit", "zásilka", "PPL", "DPD", "výdejní", "kdy dorazí", "kolik stojí doprava"],
+    "platba": ["platba", "platit", "zaplatit", "kartou", "převodem", "dobírka", "dobírku"],
+    "naceneni": ["faktura", "fakturu", "IČO", "velkoodběr", "velkoobchod", "větší množství", "nacenit", "nacenění", "nabídka", "nabídku", "poptávka", "množstevní"],
+    "clovek": ["člověk", "člověka", "operátor", "zavolat", "zavolejte", "mluvit", "kolega", "WhatsApp", "obchodník"]
+  }
+}

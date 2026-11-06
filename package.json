@@ -1,0 +1,13 @@
+{
+  "name": "promontaz-jarda",
+  "private": true,
+  "type": "module",
+  "description": "Virtuální poradce Jarda pro promontaz.cz (vanilla JS, GitHub Pages)",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  }
+}
