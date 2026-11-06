@@ -70,6 +70,13 @@ Widget si nikdy nevymýšlí dostupnost, dodací lhůty, slevy ani technické vl
 
 Do událostí se nikdy neposílá e-mail ani telefon. Hlavní metrika je `jarda_quote_sent`: v GTM založte trigger „Vlastní událost = jarda_quote_sent“ a z něj GA4 `generate_lead` (případně konverzi Ads s `transaction_id = lead_id`).
 
+## Zátěž stránky
+
+- Při načtení stránky: `jarda.min.js` (~9,6 kB gzip), `config.json` (~2 kB), logo `jarda.jpg` (11 kB, stejné jako dosud). Start až po události `load` a v klidu prohlížeče (`requestIdleCallback`), takže neovlivní LCP ani první vykreslení.
+- Plné styly panelu (`jarda.css`, ~3 kB gzip) se stahují až při najetí na ikonu nebo otevření.
+- Katalog (~1 MB gzip) se stahuje jen při prvním hledání. Příprava 15 000 položek běží po dávkách, aby neblokovala stránku.
+- Ověřeno na živém promontaz.cz (Playwright): na stránce produktu přibyly jen tři výše uvedené požadavky, bez chyb v konzoli. První hledání trvalo ~0,8 s včetně stažení indexu, další ~50 ms.
+
 ## Vývoj
 
 ```bash
@@ -91,6 +98,7 @@ npm run build
 Testujte s `?pmj=test` a s vymazaným localStorage/sessionStorage (anonymní okno).
 
 **Desktop (Chrome / Edge / Firefox)**
+- [ ] Dokud zákazník neodklikne cookie lištu Shoptetu, ikona Jardy je pod ní (lišta má přednost). Otevřený panel je nad lištou.
 - [ ] Spouštěč vpravo dole nepřekrývá tlačítko „nahoru“, cookie lištu ani košík Merkuru.
 - [ ] Klik otevře panel, kurzor je v poli. Esc a × zavřou panel a fokus se vrátí na spouštěč.
 - [ ] Tab projde čipy, tlačítka, pole i křížek ve správném pořadí s viditelným rámečkem.

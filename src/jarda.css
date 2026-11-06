@@ -1,6 +1,7 @@
 /* ProMontaz – Jarda v2. Všechno pod .pmj-root, nic globálního (kromě .pmj-lock na <html> při otevření na mobilu). */
 .pmj-root{--pmj-o:#E8730C;--pmj-oh:#CF6408;--pmj-g:#2E7D32;--pmj-gh:#EEF7EE;--pmj-beige:#F3F2EF;--pmj-t:#23282D;--pmj-m:#5F6368;--pmj-line:#E2DFD8;
   position:fixed;right:16px;bottom:16px;z-index:9990;font:400 15px/1.45 Inter,Arial,sans-serif;color:var(--pmj-t);text-align:left}
+.pmj-root.pmj-open{z-index:2147483000} /* otevřený panel nad cookie lištou Shoptetu; zavřená ikona zůstává pod ní */
 .pmj-root *,.pmj-root *::before,.pmj-root *::after{box-sizing:border-box;font-family:inherit;letter-spacing:normal;text-transform:none}
 .pmj-root p,.pmj-root ul,.pmj-root h2{margin:0;padding:0}
 .pmj-root ul{list-style:none}
