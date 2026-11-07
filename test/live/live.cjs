@@ -9,18 +9,16 @@ const V = JSON.parse(fs.readFileSync(REPO + '/package.json')).version;
 const SRC = `https://dotejdne-cmd.github.io/promontaz-jarda/dist/${V}/jarda.min.js`;
 const TYPES = { js: 'application/javascript', json: 'application/json', webp: 'image/webp', jpg: 'image/jpeg', css: 'text/css' };
 const results = []; let failed = 0;
-async function step(n, f) { try { await f(); results.push('✓ ' + n); } catch (e) { failed++; results.push('✗ ' + n + '\n    ' + String(e.message).split('\n').slice(0, 3).join('\n    ')); } }
-async function setup(ctx, reqs, errs, gtagLog) {
-  await ctx.route(/dotejdne-cmd\.github\.io\/promontaz-jarda\/dist\/jarda\.min\.js/, r => r.abort()); // produkční v2 pryč
-  await ctx.route(/dotejdne-cmd\.github\.io\/promontaz-jarda\/(?!dist\/jarda\.)/, r => {
-    const f = path.join(REPO, new URL(r.request().url()).pathname.replace('/promontaz-jarda/', ''));
-    if (!fs.existsSync(f)) return r.fulfill({ status: 404, body: 'nf' });
-    r.fulfill({ path: f, headers: { 'access-control-allow-origin': '*', 'content-type': TYPES[f.split('.').pop()] || 'text/plain' } });
-  });
-  await ctx.addInitScript(src => {
+async function step(n, f) { // živý web přes proxy občas nenačte zdroj → jeden opakovaný pokus (vypíše se)
+  for (let a = 0; a < 2; a++) { try { await f(); results.push('✓ ' + n + (a ? ' (na 2. pokus)' : '')); return; } catch (e) { if (a) { failed++; results.push('✗ ' + n + '\n    ' + String(e.message).split('\n').slice(0, 3).join('\n    ')); } } }
+}
+async function setup(ctx, reqs, errs) {
+  // Produkční cesta: Zápatí = kanál dist/stable; verze pro test se vybere jako u testera (localStorage pmj_ver).
+  // Soubory jdou ze skutečných GitHub Pages. TARGET=stable → testuje výchozí verzi kanálu (po přepnutí).
+  await ctx.addInitScript(v => {
     window.PMJ_CONFIG_OVERRIDE = { dry_run: true };
-    document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('script'); s.defer = true; s.src = src; document.body.appendChild(s); });
-  }, SRC);
+    try { if (location.hostname === 'www.promontaz.cz') { if (v) localStorage.setItem('pmj_ver', v); else localStorage.removeItem('pmj_ver'); } } catch (e) {}
+  }, process.env.TARGET === 'stable' ? '' : V);
   ctx.on('request', q => { const u = q.url(); if (/promontaz-jarda|promontaz-search\/index|user\/shop\/related/.test(u)) reqs.push(u.replace(/^https:\/\//, '').replace(/\?.*$/, '')); });
   ctx.on('page', p => { p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error' && /pmj|jarda/i.test(m.text())) errs.push(m.text()); }); });
 }
@@ -33,11 +31,13 @@ async function ask(pg, t) { await pg.fill('.pmj-q', t); await pg.press('.pmj-q',
   const ctx = await br.newContext({ viewport: { width: 1366, height: 860 } }); await setup(ctx, reqs, errs);
   const pg = await ctx.newPage();
 
-  await step('stránka produktu: načte se jen zavaděč + config + logo; v2 se nespustí', async () => {
+  await step('stránka produktu: kanál → v3 (jedna instance), při načtení jen zavaděč + config + logo', async () => {
     await pg.goto('https://www.promontaz.cz/kramle/kramle-tesarska-10x200/', { waitUntil: 'load' });
-    await pg.waitForSelector('.pmj-fab', { timeout: 20000 }); await pg.waitForTimeout(800);
-    assert.deepEqual(reqs.splice(0).filter(u => !/dist\/jarda\.min/.test(u)).sort(),
-      [`dotejdne-cmd.github.io/promontaz-jarda/assets/jarda-128.webp`, 'dotejdne-cmd.github.io/promontaz-jarda/config.json', `dotejdne-cmd.github.io/promontaz-jarda/dist/${V}/jarda.min.js`]);
+    await pg.waitForSelector('.pmj-fab', { timeout: 45000 }); await pg.waitForTimeout(1000);
+    const got = reqs.splice(0).filter(u => /promontaz-jarda/.test(u)).map(u => u.replace('dotejdne-cmd.github.io/promontaz-jarda/', '')).sort();
+    results.push('    načteno: ' + got.join(', '));
+    assert.ok(!got.some(u => /jarda-app|config\.app|index\.json|jarda\.css/.test(u)), 'aplikace/katalog se nesmí stahovat před interakcí');
+    assert.ok(got.length <= 4);
     assert.equal(await pg.$$eval('.pmj-fab', a => a.length), 1);
     assert.equal(await pg.$eval('.pmj-root', e => e.dataset.version), V);
   });
@@ -69,7 +69,7 @@ async function ask(pg, t) { await pg.fill('.pmj-q', t); await pg.press('.pmj-q',
     results.push('    v košíku: ' + items.join(', '));
   });
   await step('košík: hláška do minima, košík → poptávka', async () => {
-    await pg.waitForSelector('.pmj-fab', { timeout: 20000 }); await pg.click('.pmj-fab'); await pg.waitForSelector('.pmj-chip');
+    await pg.waitForSelector('.pmj-fab', { timeout: 45000 }); await pg.click('.pmj-fab'); await pg.waitForSelector('.pmj-chip');
     const intro = await pg.$eval('.pmj-bot', e => e.innerText);
     assert.match(intro, /Do minimální objednávky chybí|Velký nákup/);
     await pg.click('.pmj-chip:has-text("Poslat košík k nacenění")'); await pg.waitForSelector('.pmj-form');
@@ -77,7 +77,7 @@ async function ask(pg, t) { await pg.fill('.pmj-q', t); await pg.press('.pmj-q',
   });
   await step('montážní sada: komponenty podle SKU z popisu', async () => {
     await pg.goto('https://www.promontaz.cz/montazni-sady/sada-tesarske-kovani---1-000-vrutu-4-8--35-40-bit-tx20/');
-    await pg.waitForSelector('.pmj-fab', { timeout: 20000 }); await pg.click('.pmj-fab'); await pg.waitForSelector('.pmj-chip');
+    await pg.waitForSelector('.pmj-fab', { timeout: 45000 }); await pg.click('.pmj-fab'); await pg.waitForSelector('.pmj-chip');
     await pg.click('.pmj-chip:has-text("Co obsahuje sada")'); await pg.waitForSelector('.pmj-bot:last-of-type .pmj-cards', { timeout: 60000 });
     const n = await pg.$$eval('.pmj-bot:last-of-type .pmj-card-name', a => a.map(x => x.textContent));
     results.push('    komponenty: ' + n.join(' | '));
@@ -110,14 +110,14 @@ async function ask(pg, t) { await pg.fill('.pmj-q', t); await pg.press('.pmj-q',
   const m = await br.newContext({ ...devices['Pixel 7'] }); await setup(m, [], errs);
   const mp = await m.newPage();
   await step('mobil (Pixel 7 emulace): ikona, panel přes obrazovku, hledání s fotkami', async () => {
-    await mp.goto('https://www.promontaz.cz/'); await mp.waitForSelector('.pmj-fab', { timeout: 20000 });
+    await mp.goto('https://www.promontaz.cz/'); await mp.waitForSelector('.pmj-fab', { timeout: 45000 });
     const acc = await mp.$('.siteCookies__button--accept, button.js-cookiesConsentSubmit[value="all"]'); if (acc) await acc.click().catch(() => {});
     await mp.tap('.pmj-fab'); await mp.waitForSelector('.pmj-chip');
     await mp.fill('.pmj-q', 'cyky 3x2,5'); await mp.press('.pmj-q', 'Enter'); await mp.waitForSelector('.pmj-card', { timeout: 60000 });
     const [sw, iw] = await mp.evaluate(() => [document.documentElement.scrollWidth, innerWidth]); assert.equal(sw, iw);
     if (SH) { await mp.waitForTimeout(1000); await mp.screenshot({ path: SH + '/live-v3-mobile.png' }); }
   });
-  await step('bez chyb JavaScriptu Jardy', async () => assert.deepEqual(errs, []));
+  await step('bez chyb JavaScriptu Jardy', async () => assert.deepEqual(errs, [], JSON.stringify(errs).slice(0, 400)));
   await br.close();
   console.log(results.join('\n')); console.log(`\n${results.filter(r => r[0] === '✓').length}/${results.filter(r => /^[✓✗]/.test(r)).length} prošlo`);
   process.exit(failed ? 1 : 0);

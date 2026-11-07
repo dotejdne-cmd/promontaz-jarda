@@ -10,9 +10,8 @@ const ADS = /googleadservices|doubleclick|google\.com\/(pagead|rmkt|ccm)/;
 async function session(br, accept) {
   const c = await br.newContext({ viewport: { width: 1366, height: 860 } }); const hits = [];
   c.on('request', q => { const u = q.url(); if (/\/g\/collect/.test(u) || ADS.test(u)) hits.push({ u, b: q.postData() || '' }); });
-  await c.route(/dotejdne-cmd\.github\.io\/promontaz-jarda\/dist\/jarda\.min\.js/, r => r.abort());
-  await c.addInitScript(src => document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('script'); s.defer = true; s.src = src; document.body.appendChild(s); }),
-    `https://dotejdne-cmd.github.io/promontaz-jarda/dist/${V}/jarda.min.js`);
+  // produkční cesta: kanál ze Zápatí + volba verze testeru (po přepnutí stable je to výchozí verze)
+  await c.addInitScript(v => { try { if (location.hostname === 'www.promontaz.cz') localStorage.setItem('pmj_ver', v); } catch (e) {} }, V);
   const p = await c.newPage();
   await p.goto('https://www.promontaz.cz/spojovaci-material/', { waitUntil: 'load' });
   if (accept) { // kliknout na „Souhlasím“ a počkat, až Shoptet pošle gtag('consent','update', analytics granted)

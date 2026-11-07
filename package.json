@@ -17,7 +17,7 @@
   },
   "version": "3.0.3",
   "jarda": {
-    "stable": "2",
+    "stable": "3.0.3",
     "_readme": "stable = verze pro v\u0161echny z\u00e1kazn\u00edky (dist/stable/jarda.min.js v Z\u00e1pat\u00ed). \"2\" = v2, jinak \"x.y.z\". Zm\u011bna = npm run build + commit do main; projev\u00ed se do 10 min."
   }
 }
