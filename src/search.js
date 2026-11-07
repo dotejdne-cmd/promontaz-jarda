@@ -175,3 +175,14 @@ export function search(idx, query, opts) {
   }
   return res;
 }
+
+/* Náhled 100×100 ze Shoptetu. Index má „orig/x.png?ts“ nebo „big/x.png?ff=1&x=1024…&ts=…&sg=…“ (podepsaná velikost);
+   z obou → <base>x.png?ts (bez podpisu, jinak Shoptet vrátí 404 nebo velký obrázek). */
+export function thumbUrl(path, base) {
+  if (!base || !path) return '';
+  var m = /^(?:orig|big|detail|related)\/([^?]+)(?:\?(.*))?$/.exec(path);
+  if (!m) return '';
+  var ts = '';
+  if (m[2]) { var t = /(?:^|&)ts=([^&]+)/.exec(m[2]); ts = t ? t[1] : (/^[0-9a-f]{6,12}$/.test(m[2]) ? m[2] : ''); }
+  return base + m[1] + (ts ? '?' + ts : '');
+}

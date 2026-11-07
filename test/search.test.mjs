@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { norm, buildIndex, search, prepSynonyms } from '../src/search.js';
+import { norm, buildIndex, search, prepSynonyms, thumbUrl } from '../src/search.js';
 
 const idx = buildIndex(JSON.parse(fs.readFileSync(new URL('./fixture-index.json', import.meta.url))));
 const cfg = JSON.parse(fs.readFileSync(new URL('../config.json', import.meta.url)));
@@ -74,4 +74,10 @@ test('na živém indexu (pokud je stažený)', { skip: !process.env.LIVE_INDEX }
   assert.ok(r.total > 5);
   assert.ok(Date.now() - t0 < 300);
   assert.ok(search(live, 'kramle 10 x 200', opts).results[0].n.includes('Kramle tesařská 10x200'));
+});
+test('náhled 100×100: orig i podepsaný big/ (bez podpisu)', () => {
+  const B = app.thumb_base;
+  assert.equal(thumbUrl('orig/52119_kramle.png?69d66807', B), B + '52119_kramle.png?69d66807');
+  assert.equal(thumbUrl('big/70146_osb.png?ff=1&x=1024&y=768&q=85&ts=6a215edf&sg=161563f2', B), B + '70146_osb.png?6a215edf');
+  assert.equal(thumbUrl('', B), '');
 });

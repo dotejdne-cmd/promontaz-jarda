@@ -1,6 +1,6 @@
 /* ProMontaz – Jarda v3: aplikace (panel, hledání, seznam, poptávka). Stahuje se až při interakci se zavaděčem. */
 import { st, stJSON, h, abs, fetchJSON, merge } from './util.js';
-import { buildIndexAsync, search, prepSynonyms } from './search.js';
+import { buildIndexAsync, search, prepSynonyms, thumbUrl } from './search.js';
 import { prepRules, classify } from './intent.js';
 
 window.__pmjApp = function (X) {
@@ -54,10 +54,8 @@ window.__pmjApp = function (X) {
     }
     return indexP;
   }
-  function thumb(it) {
-    if (!it.i) return '';
-    return (A.thumb_base || '') ? A.thumb_base + it.i.replace(/^(orig|big|detail|related)\//, '') : '';
-  }
+  function thumb(it) { return thumbUrl(it.i, A.thumb_base); }
+
 
   /* ---------- UI ---------- */
   var panel, log, input, countEl, isOpen = false, lastFocus = null, blocks = {}, started = false;
