@@ -2,7 +2,7 @@
 import { st, stJSON, h, abs, fetchJSON, merge } from './util.js';
 import { buildIndexAsync, search, prepSynonyms, thumbUrl } from './search.js';
 import { prepRules, classify } from './intent.js';
-import { probe, formText, mailto, copyText, mailBody } from './fallback.js';
+import { probe, formText, mailto, copyText, mailBody, noLinks } from './fallback.js';
 
 window.__pmjApp = function (X) {
   var C = X.C, SD = X.SD || {}, track = X.track, root = X.root, fab = X.fab;
@@ -479,6 +479,7 @@ window.__pmjApp = function (X) {
           /* S přílohami: klasický multipart POST. AJAX endpoint FormSubmitu soubory nedoručuje (ověřeno ve schránce),
              _captcha=false → FormSubmit odpoví 302 přímo na _next (?pmj_sent=ID) → české potvrzení na webu. */
           hid('_captcha', 'false');
+          noLinks(F); // bez odkazů v polích, jinak FormSubmit nepřesměruje zpět (viz fallback.js)
           setTimeout(function () { unlock(false); }, 15000); // stránka se neopustila (síť) → znovu povolit
           document.body.appendChild(F);
           F.__pmjOk = 1; // ochrana formulářů (guard) už nekontroluje znovu

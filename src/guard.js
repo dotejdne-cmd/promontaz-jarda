@@ -2,7 +2,7 @@
    v config.json zapnuto formsubmit_guard.nacenit. Kód formuláře se nemění: formulář odesílá přes
    HTMLFormElement.prototype.submit.call(…), tady se volání obalí kontrolou služby. Když FormSubmit neodpovídá,
    nic se neodešle, zákazník zůstane na stránce s vyplněnými údaji a dostane připravený e-mail na info@. */
-import { probe, formText, mailto, copyText, mailBody } from './fallback.js';
+import { probe, formText, mailto, copyText, mailBody, noLinks } from './fallback.js';
 
 window.__pmjGuard = function (X) {
   if (window.__pmjGuardOn) return;
@@ -17,6 +17,7 @@ window.__pmjGuard = function (X) {
          formuláře (?odeslano=ID = jeho české poděkování). Přílohy jdou klasickým multipart odesláním jako dosud. */
       if (X.C.formsubmit_guard && X.C.formsubmit_guard.nacenit_direct && !f.querySelector('[name="_captcha"]')) {
         var cap = document.createElement('input'); cap.type = 'hidden'; cap.name = '_captcha'; cap.value = 'false'; f.appendChild(cap);
+        noLinks(f); // odkaz v textu zákazníka by vypnul návrat na _next
       }
       f.__pmjOk = 1; orig.call(f);
     });

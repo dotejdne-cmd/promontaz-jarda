@@ -52,3 +52,14 @@ export function mailBody(id, text, files) {
   return 'Dobrý den,\nposílám poptávku e-mailem, protože formulář na webu se teď nepodařilo odeslat.\n\nČíslo poptávky: ' + id + '\n\n' + text +
     (files.length ? '\n\nPřílohy (přikládám k tomuto e-mailu): ' + files.join(', ') : '') + '\n';
 }
+
+/* FormSubmit při klasickém odeslání nepřesměruje na _next (zákazník zůstane na anglické stránce „Thanks“),
+   jakmile hodnota pole obsahuje odkaz (http(s):// nebo www.) – ověřeno 7. 11. 2026. Odkazy na vlastní web
+   → cesta (/kramle/…), cizí odkazy se rozbijí mezerou (zůstanou čitelné). Technická pole _… se nemění. */
+export function noLinks(form) {
+  Array.prototype.forEach.call(form.querySelectorAll('input[type=hidden], textarea'), function (el) {
+    if (!el.name || el.name.charAt(0) === '_') return;
+    el.value = String(el.value).replace(/https?:\/\/(?:www\.)?promontaz\.cz(\/[^\s]*)?/gi, function (m, path) { return path || '/'; })
+      .replace(/(https?):\/\//gi, '$1:// ').replace(/\bwww\./gi, 'www .');
+  });
+}

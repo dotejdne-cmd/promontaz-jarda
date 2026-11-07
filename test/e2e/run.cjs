@@ -219,6 +219,10 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     const body = window_log[0].body;
     assert.match(body, /name="_captcha"\r\n\r\nfalse/); assert.match(body, /name="attachment"; filename="foto\.png"/); assert.match(body, /Content-Type: image\/png/);
     assert.ok(body.includes(PNG.toString('latin1').slice(0, 8)), 'obsah souboru v těle požadavku');
+    // žádné odkazy v polích (jinak FormSubmit nepřesměruje): stránka i produkty jako cesta
+    const fields = body.split(/-{6,}\S+/).filter(x => /name="[^_]/.test(x) && !/filename=/.test(x)).map(x => x.split('\r\n\r\n').slice(1).join(''));
+    assert.ok(fields.length > 5 && fields.every(v => !/https?:\/\/\S|\bwww\.\S/i.test(v)), fields.filter(v => /https?:\/\/\S|www\.\S/.test(v)).join(' | ')); // odkaz, který FormSubmitu vadí
+    assert.match(body, /name="Str\xc3\xa1nka"\r\n\r\nhttp:\/\/ 127\.0\.0\.1:\d+\/demo\.html/); // cizí doména jen rozbitá mezerou
     assert.ok((await events(pg)).includes('jarda_quote_accepted'));
     assert.equal(await pg.evaluate(() => localStorage.pmj2_list || null), null);
   });
@@ -271,10 +275,12 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
   await step('/nacenit-material/ s nacenit_direct: _captcha=false, příloha v POSTu, návrat na vlastní poděkování (?odeslano=ID)', async () => {
     const np = await ctx.newPage(); await formsubmit(np, 'ok'); window_log.length = 0;
     await np.goto(B.replace('demo.html', 'nacenit-material/') + '?direct=1'); await np.waitForFunction(() => window.__pmjGuardOn, null, { timeout: 15000 });
+    await np.fill('#pmq-message', 'výkres: https://www.uschovna.cz/zasilka/ABC');
     await np.setInputFiles('#pmq-files', [{ name: 'rozpocet.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') }]);
     await np.click('#pmq-send'); await np.waitForURL(/odeslano=PM-261107-ABCDEF/, { timeout: 15000 });
     assert.equal(window_log.length, 1); assert.match(window_log[0].url, /^https:\/\/formsubmit\.co\/info@promontaz\.cz$/);
     assert.match(window_log[0].body, /name="_captcha"\r\n\r\nfalse/); assert.match(window_log[0].body, /filename="rozpocet\.pdf"/); assert.match(window_log[0].body, /%PDF-1\.4 test/);
+    assert.match(window_log[0].body, /https:\/\/ www \.uschovna\.cz/); assert.ok(!/https:\/\/www\./.test(window_log[0].body.replace(/name="_next"[^-]*/, '')));
     await np.close();
   });
   await step('/nacenit-material/ bez nacenit_direct: odeslání beze změny (bez _captcha)', async () => {
