@@ -15,6 +15,7 @@ const server = http.createServer((q, r) => {
 });
 const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
 const results = []; let failed = 0;
+const STABLE = String((require('../../package.json').jarda || {}).stable || '2'), DEF = STABLE === '2' ? 'v2' : STABLE; // výchozí verze kanálu
 async function step(name, fn) {
   try { await fn(); results.push('✓ ' + name); }
   catch (e) { failed++; results.push('✗ ' + name + '\n    ' + String(e.message).split('\n').slice(0, 4).join('\n    ')); }
@@ -226,10 +227,10 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
   });
 
   const inst = p2 => p2.evaluate(() => ({ fabs: document.querySelectorAll('.pmj-fab').length, ver: (document.querySelector('.pmj-root') || {}).dataset ? document.querySelector('.pmj-root').dataset.version || 'v2' : '' }));
-  await step('kanál stable → v2: všichni zákazníci dostanou v2 (jedna instance)', async () => {
+  await step('kanál stable: všichni zákazníci dostanou výchozí verzi (jedna instance)', async () => {
     await pg.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
     await pg.goto(B + '?page=category&ch=1'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: DEF });
   });
   await step('kanál: ?pmj_ver=3.0.3 zapne v3 jen v tomto prohlížeči a pamatuje si to', async () => {
     await pg.goto(B + '?page=category&ch=1&pmj_ver=3.0.3'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
@@ -238,13 +239,13 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.3' });
     const ctx2 = await br.newContext(); const o = await ctx2.newPage();  // jiný prohlížeč = jiný zákazník
     await ctxSetup(ctx2, errs); await o.goto(B + '?page=category&ch=1'); await o.waitForSelector('.pmj-fab'); await o.waitForTimeout(800);
-    assert.deepEqual(await inst(o), { fabs: 1, ver: 'v2' }); await ctx2.close();
+    assert.deepEqual(await inst(o), { fabs: 1, ver: DEF }); await ctx2.close();
   });
   await step('kanál: ?pmj_ver=reset vrátí výchozí; neexistující verze spadne na výchozí', async () => {
     await pg.goto(B + '?page=category&ch=1&pmj_ver=reset'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: DEF });
     await pg.goto(B + '?page=category&ch=1&pmj_ver=9.9.9'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200);
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: DEF });
     assert.equal(await pg.evaluate(() => localStorage.pmj_ver || null), null);
     await pg.goto(B + '?page=category&pmj_ver=9.9.9'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200); // přímý řádek v3
     assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.3' });
