@@ -219,6 +219,40 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.deepEqual(v, []);
   });
 
+  const inst = p2 => p2.evaluate(() => ({ fabs: document.querySelectorAll('.pmj-fab').length, ver: (document.querySelector('.pmj-root') || {}).dataset ? document.querySelector('.pmj-root').dataset.version || 'v2' : '' }));
+  await step('kanál stable → v2: všichni zákazníci dostanou v2 (jedna instance)', async () => {
+    await pg.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+    await pg.goto(B + '?page=category&ch=1'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
+  });
+  await step('kanál: ?pmj_ver=3.0.0 zapne v3 jen v tomto prohlížeči a pamatuje si to', async () => {
+    await pg.goto(B + '?page=category&ch=1&pmj_ver=3.0.0'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.0' });
+    await pg.goto(B + '?page=category&ch=1'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.0' });
+    const ctx2 = await br.newContext(); const o = await ctx2.newPage();  // jiný prohlížeč = jiný zákazník
+    await ctxSetup(ctx2, errs); await o.goto(B + '?page=category&ch=1'); await o.waitForSelector('.pmj-fab'); await o.waitForTimeout(800);
+    assert.deepEqual(await inst(o), { fabs: 1, ver: 'v2' }); await ctx2.close();
+  });
+  await step('kanál: ?pmj_ver=reset vrátí výchozí; neexistující verze spadne na výchozí', async () => {
+    await pg.goto(B + '?page=category&ch=1&pmj_ver=reset'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
+    await pg.goto(B + '?page=category&ch=1&pmj_ver=9.9.9'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200);
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
+    assert.equal(await pg.evaluate(() => localStorage.pmj_ver || null), null);
+    await pg.goto(B + '?page=category&pmj_ver=9.9.9'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200); // přímý řádek v3
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.0' });
+  });
+  await step('kanál: v3 → ?pmj_ver=2 načte v2; dva řádky v Zápatí = stále jedna instance', async () => {
+    await pg.goto(B + '?page=category&pmj_ver=2'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
+    for (const v of ['2', '3.0.0']) {
+      await pg.goto(B + '?page=category&ch=1&both=1&pmj_ver=' + v); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200);
+      assert.equal((await inst(pg)).fabs, 1, 'pmj_ver=' + v);
+    }
+    await pg.goto(B + '?page=category&pmj_ver=reset');
+  });
+
   const m = await br.newContext({ ...devices['iPhone 13'] }); await ctxSetup(m, errs);
   const mp = await m.newPage();
   await step('mobil (iPhone 13, emulace v Chromiu): panel přes celou obrazovku, bez vodorovného posunu', async () => {

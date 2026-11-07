@@ -37,10 +37,22 @@ await build({ ...common, entryPoints: ['src/loader.js'], outfile: `${OUT}/jarda.
 await build({ ...common, entryPoints: ['src/app.js'], outfile: `${OUT}/jarda-app.min.js`, define: { __VERSION__: JSON.stringify(V), __CSS__: JSON.stringify(css) },
   banner: { js: `/* ProMontaz – Jarda ${V} app */` } });
 
+// 3b) kanál dist/stable/jarda.min.js – jediný řádek v Zápatí; výchozí verze pro všechny
+const STABLE = String((pkg.jarda || {}).stable || '2');
+fs.mkdirSync('dist/stable', { recursive: true });
+if (STABLE === '2') {
+  await build({ ...common, entryPoints: ['src/stub.js'], outfile: 'dist/stable/jarda.min.js', define: { __TARGET__: '"2"' },
+    banner: { js: '/* ProMontaz – Jarda kanál stable → v2 */' } });
+} else {
+  if (!/^\d+\.\d+\.\d+$/.test(STABLE) || !fs.existsSync(`dist/${STABLE}/jarda.min.js`)) fail(`kanál stable → ${STABLE}: dist/${STABLE}/jarda.min.js neexistuje`);
+  else fs.copyFileSync(`dist/${STABLE}/jarda.min.js`, 'dist/stable/jarda.min.js');
+}
+console.log(`dist/stable/jarda.min.js → ${STABLE === '2' ? 'v2 (dist/jarda.min.js)' : STABLE}`);
+
 // 4) rozpočty (raw i gzip) – zavaděč se stahuje s každou stránkou, aplikace až při interakci
-const BUDGET = { 'jarda.min.js': [10 * 1024, 4 * 1024], 'jarda-app.min.js': [48 * 1024, 16 * 1024] };
+const BUDGET = { [`${OUT}/jarda.min.js`]: [10 * 1024, 4 * 1024], [`${OUT}/jarda-app.min.js`]: [48 * 1024, 16 * 1024], 'dist/stable/jarda.min.js': [10 * 1024, 4 * 1024] };
 for (const [f, [raw, gz]] of Object.entries(BUDGET)) {
-  const b = fs.readFileSync(`${OUT}/${f}`), g = zlib.gzipSync(b, { level: 9 }).length;
-  console.log(`${OUT}/${f}: ${(b.length / 1024).toFixed(1)} kB, gzip ${(g / 1024).toFixed(1)} kB`);
+  const b = fs.readFileSync(f), g = zlib.gzipSync(b, { level: 9 }).length;
+  console.log(`${f}: ${(b.length / 1024).toFixed(1)} kB, gzip ${(g / 1024).toFixed(2)} kB`);
   if (b.length > raw || g > gz) fail(`${f} přesahuje rozpočet ${raw / 1024} kB / gzip ${gz / 1024} kB`);
 }

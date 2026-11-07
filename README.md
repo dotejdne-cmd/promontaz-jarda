@@ -9,18 +9,18 @@ Lehký průvodce nákupem bez AI a bez placených služeb. Najde materiál v kat
 | Při otevření | CSS 9 kB | aplikace s CSS 43 kB (15,5 kB gzip) + `config.app.json` |
 | Měření v GA4 | **nedorazí** (`dataLayer.push`, web nemá GTM) | `gtag('event', …, {send_to: 'GA4'})` |
 
-## Nasazení (dělá majitel, po schválení)
+## Nasazení: jeden řádek v Zápatí napořád
 
-1. Sloučit větev `jarda-v3` do `main`. GitHub Pages zveřejní soubory do `dist/3.0.0/`. **Web se tím nezmění**, Zápatí pořád načítá v2.
-2. Ověřit na `https://dotejdne-cmd.github.io/promontaz-jarda/demo.html`.
-3. V Shoptetu (**Vzhled a obsah → Editor → HTML kód → Zápatí**) nahradit řádek v2:
-   ```html
-   <script defer src="https://dotejdne-cmd.github.io/promontaz-jarda/dist/3.0.0/jarda.min.js"></script>
-   ```
-4. Otestovat na `https://www.promontaz.cz/?pmj=test` podle checklistu níže. V testovacím režimu má předmět e-mailu „TEST –“ a události mají `jarda_test: true`.
-
-**Rollback:** v Zápatí vrátit předchozí řádek, tedy `…/dist/jarda.min.js?v=2` pro v2 nebo starší `dist/<verze>/`. Zveřejněné verze se nikdy nepřepisují (kontroluje CI), takže návrat funguje vždy.
-**Okamžité vypnutí bez Shoptetu:** v `config.json` nastavit `"enabled": false`. Projeví se do 10 minut (cache GitHub Pages), v3 se pak nezobrazí. Pro jednu stránku stačí parametr `?pmj=off`.
+Zápatí bude mít jediný řádek, **kanál** `dist/stable/jarda.min.js`:
+```html
+<script defer src="https://dotejdne-cmd.github.io/promontaz-jarda/dist/stable/jarda.min.js"></script>
+```
+- Kanál dnes ukazuje na **v2**, takže zákazníci po výměně řádku nepoznají rozdíl (malý stub 0,6 kB gzip, který načte v2).
+- **Test jiné verze jen ve vašem prohlížeči:** otevřete `https://www.promontaz.cz/?pmj_ver=3.0.0`. Volba se uloží do localStorage tohoto prohlížeče a platí na všech stránkách, dokud ji nezrušíte přes `?pmj_ver=reset`. `?pmj_ver=2` vynutí v2. Neexistující verze se sama vrátí na výchozí. Ostatní zákazníci nic nepoznají.
+- `?pmj=test` jen označí testovací poptávky (předmět „TEST –“, `jarda_test` v měření). Verzi nevybírá. Pro test v3 použijte obojí: `?pmj_ver=3.0.0&pmj=test`.
+- **Přepnutí všech zákazníků** (bez úpravy Shoptetu): v `package.json` nastavit `"jarda": {"stable": "3.0.0"}`, spustit `npm run build` a commitnout do `main`. Do 10 minut (cache GitHub Pages) mají všichni v3. Kanál je pak kopie zavaděče v3, takže nepřibude žádný požadavek navíc.
+- **Rollback:** `"stable": "2"` (nebo předchozí verze), build a commit. Do 10 minut je zpět. Nouzově: `config.json → "enabled": false` vypne v3, nebo v Zápatí vrátit přímo `…/dist/jarda.min.js?v=2`.
+- Dvě instance nevzniknou: každá verze se ukončí, pokud už Jarda na stránce běží (`window.__pmj`), i kdyby v Zápatí zůstal i starý řádek.
 
 ## Verzování a vydání
 

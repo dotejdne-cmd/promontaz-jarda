@@ -2,7 +2,7 @@
   "name": "promontaz-jarda",
   "private": true,
   "type": "module",
-  "description": "Virtuální poradce Jarda pro promontaz.cz (vanilla JS, GitHub Pages)",
+  "description": "Virtu\u00e1ln\u00ed poradce Jarda pro promontaz.cz (vanilla JS, GitHub Pages)",
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
@@ -15,5 +15,9 @@
     "esbuild": "0.24.2",
     "playwright": "^1.63.0"
   },
-  "version": "3.0.0"
+  "version": "3.0.0",
+  "jarda": {
+    "stable": "2",
+    "_readme": "stable = verze pro v\u0161echny z\u00e1kazn\u00edky (dist/stable/jarda.min.js v Z\u00e1pat\u00ed). \"2\" = v2, jinak \"x.y.z\". Zm\u011bna = npm run build + commit do main; projev\u00ed se do 10 min."
+  }
 }

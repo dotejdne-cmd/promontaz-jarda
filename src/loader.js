@@ -3,15 +3,18 @@
    formulář, styly) je v jarda-app.min.js, který se stáhne až při najetí na ikonu nebo kliknutí. */
 import { st, stJSON, h, abs, fetchJSON, shoptetData, merge } from './util.js';
 import { makeTracker } from './track.js';
+import { rootOf, wanted, load } from './channel.js';
 
 (function () {
   'use strict';
   if (window.__pmj) return; // už běží jiná verze Jardy (v2 nebo duplicitní řádek) – nespouštět dvakrát
-  window.__pmj = 3;
-
   var VERSION = __VERSION__;
   var SCRIPT = document.currentScript;
   var SRC = (SCRIPT && SCRIPT.src) || location.href;
+  var ROOT = rootOf(SRC);
+  var W = wanted();
+  if (W && W !== VERSION) { load(ROOT, W, function () { load(ROOT, SRC); }); return; } // jiná verze jen pro tento prohlížeč (?pmj_ver=…)
+  window.__pmj = 3;
   var Q = location.search;
   var TEST = /[?&]pmj=test(&|$)/.test(Q);
   if (/[?&]pmj=off(&|$)/.test(Q)) return; // ruční vypnutí pro test stránky bez Jardy
@@ -20,7 +23,7 @@ import { makeTracker } from './track.js';
 
   var C = {
     __version: VERSION, __test: TEST, enabled: true, name: 'Jarda', role: 'Virtuální poradce', whatsapp: '420722792670', ga4_send_to: 'GA4',
-    logo_v3: abs('../../assets/jarda-128.webp', SRC), logo_fallback: abs('../../assets/jarda-160.jpg', SRC),
+    logo_v3: ROOT + 'assets/jarda-128.webp', logo_fallback: ROOT + 'assets/jarda-160.jpg',
     links: {}, facts: null, auto_open: { enabled: false }, context: {}, texts: { greeting: 'Dobrý den, s čím pomůžu?', no_auto: 'Neotevírat automaticky' }
   };
   var track = makeTracker(function () { return C; });
@@ -47,12 +50,12 @@ import { makeTracker } from './track.js';
   function loadApp() {
     if (!appP) appP = new Promise(function (res, rej) {
       if (window.__pmjApp) return res();
-      var s = h('script', { src: abs('jarda-app.min.js', SRC), async: true });
+      var s = h('script', { src: ROOT + 'dist/' + VERSION + '/jarda-app.min.js', async: true });
       s.onload = function () { window.__pmjApp ? res() : rej(new Error('app')); };
       s.onerror = rej;
       document.head.appendChild(s);
     }).then(function () {
-      app = app || window.__pmjApp({ C: C, SD: SD, root: root, fab: fab, track: track, updateBadge: updateBadge, hideTeaser: hideTeaser, base: SRC, test: TEST });
+      app = app || window.__pmjApp({ C: C, SD: SD, root: root, fab: fab, track: track, updateBadge: updateBadge, hideTeaser: hideTeaser, root_url: ROOT, test: TEST });
       return app;
     });
     appP.catch(function () { appP = null; });
@@ -127,7 +130,7 @@ import { makeTracker } from './track.js';
 
   function start() {
     var o = window.PMJ_CONFIG_OVERRIDE; // jen demo a testy
-    fetchJSON(abs('../../config.json', SRC), 6000).then(function (j) { merge(C, j); }, function () {}).then(function () {
+    fetchJSON(ROOT + 'config.json', 6000).then(function (j) { merge(C, j); }, function () {}).then(function () {
       if (o) merge(C, o);
       C.__version = VERSION; C.__test = TEST;
       render();

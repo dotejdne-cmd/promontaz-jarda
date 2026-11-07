@@ -9,7 +9,7 @@ window.__pmjApp = function (X) {
 
   /* config.app.json (pravidla, texty v3). Bez něj Jarda funguje dál: volný text se bere jako hledání. */
   var A = { texts_v3: {}, intent_rules: {}, synonyms: {}, quote: {}, cart_add: {}, contact: {} }, RULES = {}, SYN = {};
-  var cfgP = fetchJSON(abs('../../config.app.json', X.base), 6000).then(function (j) { merge(A, j); }, function () {}).then(function () {
+  var cfgP = fetchJSON(X.root_url + 'config.app.json', 6000).then(function (j) { merge(A, j); }, function () {}).then(function () {
     if (window.PMJ_APP_CONFIG_OVERRIDE) merge(A, window.PMJ_APP_CONFIG_OVERRIDE);
     RULES = prepRules(A.intent_rules); SYN = prepSynonyms(A.synonyms);
   });

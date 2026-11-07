@@ -80,6 +80,12 @@
   var push = dataLayer.push.bind(dataLayer), out = document.getElementById('dl');
   dataLayer.push = function (o) { if (o && /^jarda_/.test(o.event || '')) out.textContent += JSON.stringify(o) + '\n'; return push(o); };
 </script>
-<script defer src="dist/3.0.0/jarda.min.js"></script>
+<script>
+  // ?ch=1 → načíst přes kanál dist/stable/jarda.min.js (jako v Zápatí); ?both=1 → kanál i přímý řádek v3 (test dvou instancí)
+  (function () {
+    var src = q.get('ch') ? 'dist/stable/jarda.min.js' : 'dist/3.0.0/jarda.min.js';
+    [src].concat(q.get('both') ? ['dist/3.0.0/jarda.min.js'] : []).forEach(function (u) { var s = document.createElement('script'); s.src = u; s.defer = true; document.body.appendChild(s); });
+  })();
+</script>
 </body>
 </html>
