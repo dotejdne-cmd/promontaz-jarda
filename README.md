@@ -26,7 +26,7 @@ Lehký průvodce nákupem bez AI a bez placených služeb. Najde materiál v kat
 
 - Kód je v `src/`. `npm run build` vytvoří `dist/<verze z package.json>/` (`jarda.min.js` = zavaděč, `jarda-app.min.js` = aplikace se styly).
 - **Každá změna kódu = nová verze** v `package.json`, tedy nový adresář a nová adresa v Zápatí. Prohlížeče tak nikdy nemíchají starý a nový kód a cache nevadí.
-- `dist/jarda.min.js` a `dist/jarda.css` jsou zmrazená v2 (kontrolní součty v `scripts/build.mjs`). Zdroj v2 je v tagu `v2.0.0`.
+- `dist/jarda.min.js` a `dist/jarda.css` jsou zmrazená v2 (kontrolní součty v `scripts/build.mjs`). Zdroj v2 je v commitu `1bd35e3` na `main` (lokální tag `v2.0.0`).
 - CI (`.github/workflows/test.yml`) při každém push spustí:
   - jednotkové testy,
   - build s rozpočty velikosti (zavaděč ≤ 4 kB gzip, aplikace ≤ 16 kB gzip),
