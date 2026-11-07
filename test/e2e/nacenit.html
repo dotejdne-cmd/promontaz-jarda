@@ -5,17 +5,17 @@
   <input id="pmq-files" type="file" multiple><button type="submit" id="pmq-send">Odeslat poptávku</button>
 </div></section>
 <script>
-  window.PMJ_CONFIG_OVERRIDE = { formsubmit_guard: { nacenit: true } };
+  window.PMJ_CONFIG_OVERRIDE = { formsubmit_guard: { nacenit: true, nacenit_ajax: /[?&]ajax=1/.test(location.search) } };
   document.getElementById('pmq-send').onclick = function () {
     var b = this; b.disabled = true; b.textContent = 'Odesílám…';
     var r = document.createElement('form'); r.method = 'post'; r.action = 'https://formsubmit.co/info@promontaz.cz'; r.enctype = 'multipart/form-data'; r.style.display = 'none';
     function s(n, v) { var i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; r.appendChild(i); }
-    s('_subject', 'Poptávka PM-261107-ABCDEF'); s('_next', location.href + '?odeslano=PM-261107-ABCDEF'); s('Číslo poptávky', 'PM-261107-ABCDEF');
+    s('_subject', 'Poptávka PM-261107-ABCDEF'); s('_next', location.origin + location.pathname + '?odeslano=PM-261107-ABCDEF'); s('Číslo poptávky', 'PM-261107-ABCDEF');
     s('Jméno nebo firma', document.getElementById('pmq-name').value); s('email', document.getElementById('pmq-email').value); s('Text poptávky', document.getElementById('pmq-message').value);
     var f = document.getElementById('pmq-files').files; if (f.length) { var x = document.createElement('input'); x.type = 'file'; x.name = 'attachment'; var dt = new DataTransfer(); dt.items.add(f[0]); x.files = dt.files; r.appendChild(x); }
     try { sessionStorage.setItem('pmq_draft', 'ok'); } catch (e) {}
     document.body.appendChild(r); HTMLFormElement.prototype.submit.call(r);
   };
 </script>
-<script defer src="/dist/3.0.4/jarda.min.js"></script>
+<script defer src="/dist/3.0.5/jarda.min.js"></script>
 </body></html>

@@ -335,6 +335,7 @@ window.__pmjApp = function (X) {
   }
   function mb(n) { return n < 1048576 ? Math.max(1, Math.round(n / 1024)) + ' kB' : (n / 1048576).toFixed(1).replace('.', ',') + ' MB'; }
   function icoOk(v) { if (!/^\d{8}$/.test(v)) return false; for (var s = 0, i = 0; i < 7; i++) s += +v[i] * (8 - i); return (11 - s % 11) % 10 === +v[7]; }
+  function ajaxUrl(u) { return String(u || '').replace(/^(https:\/\/formsubmit\.co\/)(?!ajax\/)/, '$1ajax/'); }
   function leadId() {
     var a = 'ABCDEFGHJKMNPQRSTVWXYZ0123456789', s = '', d = new Date(), r = new Uint8Array(6);
     (window.crypto || window.msCrypto).getRandomValues(r);
@@ -466,15 +467,30 @@ window.__pmjApp = function (X) {
       if (okFiles !== files.length) { err.textContent = 'Přílohy se nepodařilo připojit. Zkuste jiný prohlížeč, nebo je pošlete na ' + contact().email + '.'; return; }
       saveDraft();
       submitting = true; send.disabled = true; send.textContent = 'Odesílám…';
+      /* Odeslání na AJAX endpoint FormSubmitu (formsubmit.co/ajax/…): odpověď {"success":"true"} je jediné potvrzení
+         přijetí. Zákazník zůstává na promontaz.cz (bez reCAPTCHA stránky a bez závislosti na přesměrování _next). */
       var go = function () {
         st('sessionStorage', 'pending', JSON.stringify({ id: id, t: Date.now(), n: n, f: files.length }));
         track('jarda_quote_submit', { lead_id: id, items_count: n, attachments_count: files.length, has_zip: !!z, has_ico: !!ic, quote_source: source || '' });
         submitAt = Date.now();
-        setTimeout(function () { unlock(false); }, 15000); // stránka se neopustila (síť, výpadek služby) → znovu povolit
-        document.body.appendChild(F);
-        F.__pmjOk = 1; // ochrana formulářů (guard) už nekontroluje znovu
+        send.textContent = files.length ? 'Odesílám poptávku a přílohy…' : 'Odesílám…';
         if (C.dry_run) { location.href = nextUrl(id); return; }
-        HTMLFormElement.prototype.submit.call(F);
+        var fd = new FormData(F), ctl = window.AbortController ? new AbortController() : null;
+        var tmo = setTimeout(function () { if (ctl) ctl.abort(); }, (A.quote && A.quote.send_timeout_ms) || 90000);
+        var ft = formText(F), names = files.map(function (f) { return f.name; });
+        fetch(ajaxUrl(C.formsubmit_endpoint), { method: 'POST', body: fd, headers: { Accept: 'application/json' }, credentials: 'omit', signal: ctl ? ctl.signal : undefined })
+          .then(function (r) { return r.text().then(function (t) { var j = null; try { j = JSON.parse(t); } catch (e) {} return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            clearTimeout(tmo);
+            if (res.ok && res.j && (res.j.success === true || res.j.success === 'true')) { accepted(id, n, files.length); return; }
+            // služba odpověděla, ale poptávku NEpřijala (např. aktivace, spam) → nic nepotvrzovat, údaje zůstávají
+            st('sessionStorage', 'pending', null); unlock(false);
+            fallbackBlock(id, ft.text, names, 'service_rejected', null, res.j && res.j.message);
+          }, function () {
+            clearTimeout(tmo); unlock(false);
+            // bez odpovědi (síť, časový limit): nevíme, zda dorazila → neposílat automaticky znovu, nabídnout e-mail
+            fallbackBlock(id, ft.text, names, 'no_response', null, null, true);
+          });
       };
       if (forceSend || C.dry_run) { forceSend = false; go(); return; }
       /* Výpadek FormSubmitu (522) se pozná dřív, než zákazník opustí stránku → záložní e-mail místo chybové stránky */
@@ -505,30 +521,39 @@ window.__pmjApp = function (X) {
 
   /* Návrat z FormSubmitu na ?pmj_sent=ID = služba poptávku přijala (ne potvrzení doručení do schránky). */
   function handleReturn() {
-    var id = new URLSearchParams(location.search).get('pmj_sent'), pend = stJSON('sessionStorage', 'pending', null), sent = stJSON('sessionStorage', 'sent', []);
+    var id = new URLSearchParams(location.search).get('pmj_sent'), pend = stJSON('sessionStorage', 'pending', null);
     try { var u = new URL(location.href); u.searchParams.delete('pmj_sent'); history.replaceState(history.state, '', u.href); } catch (e) {}
-    if (!id || !pend || pend.id !== id || sent.indexOf(id) > -1) return;
+    if (!id || !pend || pend.id !== id) return;
+    cfgP.then(function () { accepted(id, pend.n || 0, pend.f || 0, true); });
+  }
+  /* Přijato službou (AJAX odpověď success, dříve návrat z _next). Duplicity: každé číslo poptávky se započítá jen jednou. */
+  function accepted(id, n, f, reopen) {
+    var sent = stJSON('sessionStorage', 'sent', []);
+    if (sent.indexOf(id) > -1) return;
     sent.push(id);
     st('sessionStorage', 'sent', JSON.stringify(sent.slice(-20)));
     st('sessionStorage', 'pending', null); st('sessionStorage', 'draft', null);
     setList([]);
-    track('jarda_quote_accepted', { lead_id: id, items_count: pend.n || 0, attachments_count: pend.f || 0 });
+    submitting = false;
+    remove(blocks.quote); remove(blocks.fallback); remove(blocks.unconf);
+    track('jarda_quote_accepted', { lead_id: id, items_count: n, attachments_count: f });
     try { (window.dataLayer = window.dataLayer || []).push({ event: 'jarda_quote_sent', lead_id: id }); } catch (e) {} // kompatibilita s v2 (jen dataLayer)
-    cfgP.then(function () {
-      open('quote_accepted', true);
-      say([p(T('quote_accepted', { id: id })), contactButtons('Dotaz k poptávce ' + id, 'after_quote')]);
-    });
+    if (reopen) open('quote_accepted', true);
+    say([p(T('quote_accepted', { id: id }), 'pmj-note'), contactButtons('Dotaz k poptávce ' + id, 'after_quote')], 'pmj-bot', 'accepted');
   }
   /* Odeslání bez návratu (chyba FormSubmitu, zavřená stránka ověření, Zpět) → upozornit, seznam zůstává. */
   /* Záložní cesta: poptávka NEBYLA odeslána → připravený e-mail na info@, kopie do schránky, WhatsApp. */
-  function fallbackBlock(id, text, fileNames, reason, retry) {
+  function fallbackBlock(id, text, fileNames, reason, retry, serviceMsg, unknown) {
     var c = contact(), body = mailBody(id, text, fileNames), subj = (X.test ? 'TEST – ' : '') + 'Poptávka ' + id + ' (záložní e-mail)';
     track('jarda_quote_fallback', { lead_id: id, reason: reason, attachments_count: fileNames.length });
     var cp = btn('Zkopírovat poptávku', function () {
       copyText(body).then(function (ok) { cp.textContent = ok ? '✓ Zkopírováno' : 'Kopírování nefunguje – použijte e-mail'; });
       track('jarda_quote_fallback_click', { lead_id: id, channel: 'copy' });
     });
-    var kids = [p(T('fallback_title') || 'Odesílací služba teď neodpovídá. Poptávka NEBYLA odeslána – seznam i údaje zůstávají uložené.', 'pmj-note'),
+    var title = unknown ? (T('fallback_unknown') || 'Nepodařilo se ověřit, zda poptávka dorazila (bez odpovědi odesílací služby). Údaje zůstávají uložené.')
+      : reason === 'service_rejected' ? (T('fallback_rejected') || 'Odesílací služba poptávku nepřijala. Poptávka NEBYLA odeslána – údaje zůstávají uložené.') + (serviceMsg ? ' (' + String(serviceMsg).slice(0, 120) + ')' : '')
+      : (T('fallback_title') || 'Odesílací služba teď neodpovídá. Poptávka NEBYLA odeslána – seznam i údaje zůstávají uložené.');
+    var kids = [p(title, 'pmj-note'),
       p(T('fallback_text') || 'Pošlete ji prosím e-mailem, připravili jsme ho za vás. Stačí ho odeslat ze svého e-mailu.')];
     if (fileNames.length) kids.push(p('Přílohy do e-mailu přiložte ručně: ' + fileNames.join(', ') + '.', 'pmj-small'));
     kids.push(actions([

@@ -51,7 +51,7 @@ if (STABLE === '2') {
 console.log(`dist/stable/jarda.min.js → ${STABLE === '2' ? 'v2 (dist/jarda.min.js)' : STABLE}`);
 
 // 4) rozpočty (raw i gzip) – zavaděč se stahuje s každou stránkou, aplikace až při interakci
-const BUDGET = { [`${OUT}/jarda.min.js`]: [10 * 1024, 4 * 1024], [`${OUT}/jarda-app.min.js`]: [52 * 1024, 18 * 1024] /* jen při interakci; 3.0.4 +záloha při výpadku FormSubmitu */, 'dist/stable/jarda.min.js': [10 * 1024, 4 * 1024], [`${OUT}/guard.min.js`]: [6 * 1024, 3 * 1024] };
+const BUDGET = { [`${OUT}/jarda.min.js`]: [10 * 1024, 4 * 1024], [`${OUT}/jarda-app.min.js`]: [52 * 1024, 18 * 1024] /* jen při interakci; 3.0.4 +záloha při výpadku FormSubmitu */, 'dist/stable/jarda.min.js': [10 * 1024, 4 * 1024], [`${OUT}/guard.min.js`]: [8 * 1024, 3 * 1024] /* jen na /nacenit-material/ */ };
 for (const [f, [raw, gz]] of Object.entries(BUDGET)) {
   const b = fs.readFileSync(f), g = zlib.gzipSync(b, { level: 9 }).length;
   console.log(`${f}: ${(b.length / 1024).toFixed(1)} kB, gzip ${(g / 1024).toFixed(2)} kB`);

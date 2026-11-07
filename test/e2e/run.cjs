@@ -17,6 +17,7 @@ const server = http.createServer((q, r) => {
 });
 const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
 const results = []; let failed = 0;
+const VER = require('../../package.json').version;
 const STABLE = String((require('../../package.json').jarda || {}).stable || '2'), DEF = STABLE === '2' ? 'v2' : STABLE; // výchozí verze kanálu
 async function step(name, fn) {
   try { await fn(); results.push('✓ ' + name); }
@@ -53,8 +54,8 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
   await step('zavaděč: při načtení jen zavaděč, config a logo (žádná aplikace, styly ani index)', async () => {
     await pg.goto(B + '?page=product'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(500);
     const w = reqs.filter(u => /dist\/3|config|assets|index\.json/.test(u));
-    assert.deepEqual(w.sort(), ['assets/jarda-128.webp', 'config.json', 'dist/3.0.4/jarda.min.js']);
-    assert.equal(await pg.$eval('.pmj-root', e => e.dataset.version), '3.0.4');
+    assert.deepEqual(w.sort(), ['assets/jarda-128.webp', 'config.json', 'dist/' + VER + '/jarda.min.js']);
+    assert.equal(await pg.$eval('.pmj-root', e => e.dataset.version), VER);
   });
   await step('otevření: stáhne aplikaci + config.app.json, kontextové čipy, fokus do pole', async () => {
     await openJarda(pg);
@@ -159,12 +160,22 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.ok(!(await events(pg)).includes('jarda_quote_accepted'));
   });
   // formsubmit.co v testu: 'hang' = výpadek (522 po ~20 s → kontrola po 6 s), 'fail' = rychlá chyba 522, 'ok' = přijato (302 na _next)
+  const window_log = [];
   async function formsubmit(page, mode) {
     await page.unroute(/formsubmit\.co/).catch(() => {});
     await page.route(/^https:\/\/formsubmit\.co\//, async r => {
       const q = r.request();
       if (mode === 'hang') return; // nikdy neodpoví
       if (q.method() === 'HEAD') return r.fulfill({ status: mode === 'fail' ? 522 : 200, body: '' });
+      if (/\/ajax\//.test(q.url())) { // AJAX endpoint (od 3.0.5)
+        const cors = { 'access-control-allow-origin': '*' };
+        if (q.method() === 'OPTIONS') return r.fulfill({ status: 200, headers: { ...cors, 'access-control-allow-headers': 'Content-Type, Accept' }, body: '' });
+        window_log.push({ url: q.url(), body: q.postData() || '' });
+        if (mode === 'nores') return; // bez odpovědi
+        if (mode === 'reject') return r.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: '{"success":"false","message":"This form needs Activation"}' });
+        if (mode === 'fail') return r.fulfill({ status: 522, headers: cors, contentType: 'text/html', body: 'error code: 522' });
+        return r.fulfill({ status: 200, headers: cors, contentType: 'text/html; charset=UTF-8', body: '{"success":"true","message":"The form was submitted successfully."}' });
+      }
       if (mode === 'fail') return r.fulfill({ status: 522, contentType: 'text/html', body: '<h1>Error 522 Connection timed out</h1>' });
       const next = /name="_next"\r\n\r\n([^\r]+)/.exec(q.postData() || '');
       return r.fulfill({ status: 302, headers: { location: next ? next[1] : '/' }, body: '' });
@@ -197,24 +208,39 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     await pg.click('button:has-text("Zkopírovat poptávku")'); await pg.waitForTimeout(200);
     assert.match(await pg.textContent('button:has-text("Zkopír")'), /Zkopírováno|použijte e-mail/);
   });
-  await step('FormSubmit funguje: kontrola projde a poptávka se odešle (přijato, číslo poptávky)', async () => {
-    await formsubmit(pg, 'ok');
+  await step('FormSubmit funguje (AJAX): přijato až po odpovědi success, české potvrzení na stránce, přílohy odeslány, seznam smazán', async () => {
+    await formsubmit(pg, 'ok'); window_log.length = 0;
     await quoteForm(pg, B + '?page=product&live=1');
-    await Promise.all([pg.waitForNavigation(), pg.click('.pmj-send')]);
+    await pg.click('.pmj-send');
     await pg.waitForSelector('.pmj-bot:has-text("jsme přijali")', { timeout: 10000 });
-    assert.ok((await events(pg)).includes('jarda_quote_accepted'));
+    assert.match(pg.url(), /demo\.html\?page=product/); // zákazník zůstal na webu
+    assert.equal(window_log.length, 1, 'právě jeden POST');
+    assert.match(window_log[0].url, /formsubmit\.co\/ajax\/info@promontaz\.cz/);
+    assert.match(window_log[0].body, /filename="foto\.png"/); assert.match(window_log[0].body, /name="Seznam materiálu"/);
+    const ev = await events(pg); assert.ok(ev.includes('jarda_quote_accepted') && ev.includes('jarda_quote_submit'));
+    assert.equal(await pg.evaluate(() => localStorage.pmj2_list || null), null);
+    assert.equal(await pg.$('.pmj-form'), null, 'formulář po přijetí zmizí');
   });
-  await step('rychlá chyba služby a Zpět: tlačítko není zablokované, upozornění s e-mailem, seznam zůstává', async () => {
-    await formsubmit(pg, 'fail');
+  await step('služba poptávku odmítne ({"success":"false"}): nic se nepotvrdí, záložní e-mail, údaje zůstávají', async () => {
+    await formsubmit(pg, 'reject'); window_log.length = 0;
     await quoteForm(pg, B + '?page=product&live=1');
-    await pg.route(/^https:\/\/formsubmit\.co\//, r => r.request().method() === 'HEAD' ? r.fulfill({ status: 200, body: '' }) : r.fulfill({ status: 522, contentType: 'text/html', body: '<h1>522</h1>' }));
-    await Promise.all([pg.waitForNavigation(), pg.click('.pmj-send')]);
-    await pg.goBack(); await pg.waitForSelector('.pmj-fab');
-    if (await pg.isHidden('.pmj-panel').catch(() => true)) await openJarda(pg);
-    await pg.waitForTimeout(300);
-    const st = await pg.evaluate(() => ({ disabled: [...document.querySelectorAll('.pmj-send')].some(b => b.disabled), list: JSON.parse(localStorage.pmj2_list || '[]').length,
-      note: [...document.querySelectorAll('.pmj-bot')].some(b => /možná neodeslala/.test(b.innerText)), mail: !!document.querySelector('.pmj-bot a[href^="mailto:info@promontaz.cz"]') }));
-    assert.deepEqual(st, { disabled: false, list: 1, note: true, mail: true }, JSON.stringify(st));
+    await pg.click('.pmj-send');
+    await pg.waitForSelector('.pmj-bot:has-text("nepřijala")', { timeout: 10000 });
+    assert.match(await lastBot(pg), /NEBYLA odeslána/); assert.match(await lastBot(pg), /needs Activation/);
+    const ev = await events(pg); assert.ok(!ev.includes('jarda_quote_accepted') && ev.includes('jarda_quote_fallback'));
+    assert.equal(JSON.parse(await pg.evaluate(() => localStorage.pmj2_list)).length, 1);
+    assert.equal(await pg.$eval('.pmj-send', b => b.disabled), false);
+    assert.equal(window_log.length, 1, 'žádné automatické opakování');
+  });
+  await step('služba neodpoví (časový limit): „nepodařilo se ověřit“, žádné automatické opakování, údaje zůstávají', async () => {
+    await formsubmit(pg, 'nores'); window_log.length = 0;
+    await quoteForm(pg, B + '?page=product&live=1');
+    await pg.evaluate(() => { window.PMJ_APP_CONFIG_OVERRIDE = { quote: { send_timeout_ms: 1500 } }; });
+    await pg.click('.pmj-send');
+    await pg.waitForSelector('.pmj-bot:has-text("Nepodařilo se ověřit")', { timeout: 100000 });
+    assert.equal(window_log.length, 1);
+    assert.ok(!(await events(pg)).includes('jarda_quote_accepted'));
+    assert.equal(JSON.parse(await pg.evaluate(() => localStorage.pmj2_list)).length, 1);
     await pg.unroute(/formsubmit\.co/);
   });
   await step('/nacenit-material/ s ochranou: výpadek → nic se neodešle, e-mail se seznamem a přílohou, údaje zůstávají', async () => {
@@ -230,6 +256,22 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.match(r.text, /NEBYLA odeslána/); assert.match(r.text, /seznam\.xlsx/);
     const body = decodeURIComponent(r.href.split('&body=')[1]); assert.match(body, /PM-261107-ABCDEF/); assert.match(body, /Text poptávky: 20× vrut 5x60/);
     assert.equal(posts.length, 0);
+    await np.close();
+  });
+  await step('/nacenit-material/ s AJAX režimem: po success návrat na vlastní poděkování formuláře (?odeslano=ID), jeden POST s přílohou', async () => {
+    const np = await ctx.newPage(); await formsubmit(np, 'ok'); window_log.length = 0;
+    await np.addInitScript(() => { window.__ajaxMode = 1; });
+    await np.goto(B.replace('demo.html', 'nacenit-material/') + '?ajax=1'); await np.waitForFunction(() => window.__pmjGuardOn, null, { timeout: 15000 });
+    await np.setInputFiles('#pmq-files', [{ name: 'seznam.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') }]);
+    await np.click('#pmq-send'); await np.waitForURL(/odeslano=PM-261107-ABCDEF/, { timeout: 15000 });
+    assert.equal(window_log.length, 1); assert.match(window_log[0].url, /\/ajax\/info@promontaz\.cz/); assert.match(window_log[0].body, /filename="seznam\.pdf"/);
+    await np.close();
+  });
+  await step('/nacenit-material/ s AJAX režimem: služba odmítne → nic se nepotvrdí, box „nepřijala“, údaje zůstávají', async () => {
+    const np = await ctx.newPage(); await formsubmit(np, 'reject');
+    await np.goto(B.replace('demo.html', 'nacenit-material/') + '?ajax=1'); await np.waitForFunction(() => window.__pmjGuardOn, null, { timeout: 15000 });
+    await np.click('#pmq-send'); await np.waitForSelector('#pmj-guard-box', { timeout: 15000 });
+    assert.match(await np.innerText('#pmj-guard-box'), /nepřijala/); assert.ok(!/odeslano/.test(np.url())); assert.equal(await np.inputValue('#pmq-message'), '20× vrut 5x60');
     await np.close();
   });
   await step('/nacenit-material/ bez zapnutí v configu: ochrana se nenačte (formulář beze změny)', async () => {
@@ -315,11 +357,11 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     await pg.goto(B + '?page=category&ch=1'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
     assert.deepEqual(await inst(pg), { fabs: 1, ver: DEF });
   });
-  await step('kanál: ?pmj_ver=3.0.4 zapne v3 jen v tomto prohlížeči a pamatuje si to', async () => {
-    await pg.goto(B + '?page=category&ch=1&pmj_ver=3.0.4'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.4' });
+  await step('kanál: ?pmj_ver=<verze> zapne v3 jen v tomto prohlížeči a pamatuje si to', async () => {
+    await pg.goto(B + '?page=category&ch=1&pmj_ver=' + VER); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: VER });
     await pg.goto(B + '?page=category&ch=1'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.4' });
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: VER });
     const ctx2 = await br.newContext(); const o = await ctx2.newPage();  // jiný prohlížeč = jiný zákazník
     await ctxSetup(ctx2, errs); await o.goto(B + '?page=category&ch=1'); await o.waitForSelector('.pmj-fab'); await o.waitForTimeout(800);
     assert.deepEqual(await inst(o), { fabs: 1, ver: DEF }); await ctx2.close();
@@ -331,12 +373,12 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.deepEqual(await inst(pg), { fabs: 1, ver: DEF });
     assert.equal(await pg.evaluate(() => localStorage.pmj_ver || null), null);
     await pg.goto(B + '?page=category&pmj_ver=9.9.9'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200); // přímý řádek v3
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.4' });
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: VER });
   });
   await step('kanál: v3 → ?pmj_ver=2 načte v2; dva řádky v Zápatí = stále jedna instance', async () => {
     await pg.goto(B + '?page=category&pmj_ver=2'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
     assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
-    for (const v of ['2', '3.0.4']) {
+    for (const v of ['2', VER]) {
       await pg.goto(B + '?page=category&ch=1&both=1&pmj_ver=' + v); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200);
       assert.equal((await inst(pg)).fabs, 1, 'pmj_ver=' + v);
     }
