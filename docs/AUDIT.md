@@ -16,6 +16,7 @@
 | 12 | Vypnutí jen úpravou Shoptetu | pomalá reakce při problému | `config.json → enabled: false` (do 10 min), `?pmj=off` |
 | 13 | Testy jen hledání | regrese UI nezachytí | 25 scénářů v prohlížeči + axe-core + test na živém webu + výkon |
 | 14 | Cookie lišta na mobilu zakrývá ikonu do odsouhlasení (v2 i v3) | Jarda dostupný až po volbě cookies | ponecháno záměrně – lišta má přednost (souhlas), otevřený panel je nad ní |
+| 15 | Pole hledání a formulář Jardy jsou HTML `<form>` → automatické sledování formulářů v gtag posílá `form_start`/`form_submit` do GA4 **i do Google Ads** (zjištěno živě na 3.0.1, v2 má stejnou strukturu) | Ads dostává „odeslání formuláře“ z hledání v Jardovi; zkresluje automatické konverze z formulářů | 3.0.2: `<div role=search/form>`, odeslání přes skrytý formulář bez události `submit`; ověřeno živě, že form_* už neodchází |
 
 ## Vědomě neděláno (a proč)
 

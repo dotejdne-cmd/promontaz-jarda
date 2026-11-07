@@ -47,7 +47,10 @@ import { rootOf, wanted, load } from './channel.js';
   function updateBadge() { var n = listCount(); badge.textContent = n; badge.hidden = !n; }
 
   /* Aplikace se stáhne jednou; chyba sítě → záložní nabídka s odkazy, aby zákazník nezůstal bez pomoci. */
+  var appCfgP = null;
   function loadApp() {
+    /* config.app.json souběžně se skriptem aplikace (ne až po jeho spuštění) – o jednu cestu sítí méně při otevření */
+    if (!appCfgP) { appCfgP = fetchJSON(ROOT + 'config.app.json', 6000); appCfgP.catch(function () { appCfgP = null; }); }
     if (!appP) appP = new Promise(function (res, rej) {
       if (window.__pmjApp) return res();
       var s = h('script', { src: ROOT + 'dist/' + VERSION + '/jarda-app.min.js', async: true });
@@ -55,7 +58,7 @@ import { rootOf, wanted, load } from './channel.js';
       s.onerror = rej;
       document.head.appendChild(s);
     }).then(function () {
-      app = app || window.__pmjApp({ C: C, SD: SD, root: root, fab: fab, track: track, updateBadge: updateBadge, hideTeaser: hideTeaser, root_url: ROOT, test: TEST });
+      app = app || window.__pmjApp({ C: C, SD: SD, root: root, fab: fab, track: track, updateBadge: updateBadge, hideTeaser: hideTeaser, root_url: ROOT, test: TEST, appCfg: appCfgP });
       return app;
     });
     appP.catch(function () { appP = null; });
