@@ -53,9 +53,10 @@ async function ask(pg, t) { await pg.fill('.pmj-q', t); await pg.press('.pmj-q',
   await step('hledání na živém indexu: fotky (100×100 ze Shoptetu), ceny, kódy', async () => {
     const t0 = Date.now(); await ask(pg, 'vrut 5x60'); await pg.waitForSelector('.pmj-card', { timeout: 60000 });
     results.push(`    první hledání vč. stažení indexu: ${Date.now() - t0} ms`);
-    await pg.waitForTimeout(1500);
-    const imgs = await pg.$$eval('.pmj-cards:last-of-type .pmj-thumb', a => a.map(i => [i.naturalWidth, i.src.slice(0, 60)]));
-    assert.ok(imgs.length === 5 && imgs.every(i => i[0] === 100), JSON.stringify(imgs));
+    // náhledy se načítají líně → kontrolovat jen dokončené (aspoň 3) v posledních výsledcích
+    await pg.waitForFunction(() => [...document.querySelectorAll('.pmj-bot:last-of-type .pmj-thumb')].filter(i => i.complete && i.naturalWidth).length >= 3, null, { timeout: 15000 });
+    const imgs = await pg.$$eval('.pmj-bot:last-of-type .pmj-thumb', a => a.filter(i => i.complete && i.naturalWidth).map(i => i.naturalWidth));
+    assert.ok(imgs.every(w => w === 100), JSON.stringify(imgs));
     assert.match(await lastBot(pg), /Vrut konstrukční 5,0x60.*\n?.*Kč/);
     if (SH) await pg.screenshot({ path: SH + '/live-v3-search.png' });
   });

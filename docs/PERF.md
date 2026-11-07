@@ -1,23 +1,23 @@
-# Výkon: bez Jardy × v2 × v3 (živý promontaz.cz, 6. 11. 2026)
+# Výkon v2 × v3 3.0.3 (živý promontaz.cz, 7. 11. 2026)
 
-`npm run perf`, stránka produktu Kramle tesařská 10x200, emulace Pixel 7, CPU 4× zpomalené, síť 9 Mb/s / 170 ms, medián z 5 běhů (v2 a v3 podstrčené stejným způsobem, ostatní skripty webu beze změny).
+`npm run perf`: varianty Zápatí načtené stejně (přepis HTML v testovacím prohlížeči), soubory ze skutečných GitHub Pages. Emulace Pixel 7, CPU 4×, 9 Mb/s / 170 ms, 5 běhů, neplatné běhy vyřazeny. Uvádím medián a rozsah (min–max). Tři série měření (6.–7. 11.) daly stejné závěry.
 
-| Metrika | bez Jardy | v2 | v3 3.0.0 |
+| Metrika | bez Jardy | v2 (dřívější Zápatí) | v3 3.0.3 (kanál stable) |
 |---|---:|---:|---:|
-| LCP ms | 1804 | 1596 | 1688 |
-| CLS | 0,052 | 0,052 | 0,052 |
-| TBT ms (načtení, celá stránka) | 1690 | 1747 | 1773 |
-| Čas skriptů ms (celá stránka) | 1616 | 1702 | 1723 |
+| LCP ms | 2308 (1836–2484) | 2456 (2116–2484) | 2904 / 1828 v jiné sérii (1788–2904) |
+| CLS | 0,001–0,052 | 0,052 | 0,049–0,052 |
+| TBT ms (celá stránka) | 1509 (934–2630) | 2542 (1238–2788) | 2182–3179 (794–6927) |
 | Požadavky Jardy při načtení | 0 | 3 | 3 |
-| **kB Jardy při načtení** | 0 | **39** | **15** |
-| Klik na ikonu → panel ms | – | 162 | 191 |
-| První hledání ms (vč. stažení indexu ~1 MB) | – | 2660 | 2645 |
-| TBT ms během prvního hledání | – | 604 | 525 |
+| kB Jardy při načtení (přenos) | 0 | 23 | 13 |
+| INP ms (klik na ikonu + hledání) | – | 136–160 (128–200) | 40–144 (40–160) |
+| Klik → panel ms | – | 500–951 (419–1021) | 983–1020 (922–1133) |
+| První hledání ms (index ~1 MB) | – | 2762–2862 | 2746–3075 |
 
-**Čtení výsledků**
-- Rozptyl mezi běhy je u TBT a času skriptů ±200 ms, rozdíly mezi variantami (50–100 ms) jsou v šumu. **Ani v2, ani v3 nemá měřitelný vliv na LCP, CLS ani TBT**, protože obě startují až po `load` v klidu prohlížeče.
-- v3 stahuje se stránkou o **61 % méně dat** (15 kB místo 39 kB): menší zavaděč, logo WebP 2,5 kB místo JPG 11,5 kB. Aplikace (15,6 kB gzip) se stahuje až po najetí, fokusu nebo dotyku ikony, proto je první otevření o ~30 ms pomalejší.
-- První hledání je v obou verzích ~2,6 s na zpomaleném mobilu. Rozhoduje stažení indexu promontaz-search (~1 MB gzip), který nesmíme měnit. Příprava indexu ve v3 běží po dávkách (nižší TBT během hledání).
-- Pro budoucí PageSpeed: TBT 1,7 s pochází ze skriptů webu, ne z Jardy.
+**Závěr**
+- **Načtení stránky:** rozdíly LCP, CLS a TBT mezi variantami jsou menší než rozptyl běhů téže varianty. TBT kolísá až o 6 s kvůli nestabilní síti testovacího prostředí. **Měřitelný dopad v3 na načtení oproti v2 není.** Jarda startuje až po `load` v klidu prohlížeče.
+- **Data:** v3 stahuje při načtení o 43 % méně (13 kB proti 23 kB) při stejném počtu požadavků (3). Katalog se stahuje až při prvním hledání.
+- **Interakce:** INP v3 je nižší než u v2 (40–144 proti 136–200 ms).
+- **Otevření panelu:** u v3 ~1 s. Rozbor ukázal, že čas tvoří síť: aplikace a `config.app.json` se stahují souběžně (od 3.0.3) za ~350–500 ms, panel se pak ukáže ~50 ms po jejich stažení, zbytek je kolísání sítě. v2 má stejný rozptyl (419–1021 ms). Cílenou příčinu v kódu, kterou by šlo odstranit, měření nepotvrdilo.
+- **První hledání:** stejné (~2,8 s na zpomaleném mobilu). Rozhoduje stažení indexu promontaz-search.
 
-Neověřeno: reálné zařízení (iOS Safari, Android), data CrUX / PageSpeed Insights z terénu.
+Neověřeno: reálná zařízení a terénní data (CrUX). Pozor: při intenzivním testování Shoptet dočasně blokuje IP („Access temporarily blocked“, HTTP 403). Živé testy proto nepouštějte ve smyčce.
