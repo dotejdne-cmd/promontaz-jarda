@@ -177,16 +177,17 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
         return r.fulfill({ status: 200, headers: cors, contentType: 'text/html; charset=UTF-8', body: '{"success":"true","message":"The form was submitted successfully."}' });
       }
       if (mode === 'fail') return r.fulfill({ status: 522, contentType: 'text/html', body: '<h1>Error 522 Connection timed out</h1>' });
+      window_log.push({ url: q.url(), body: (q.postDataBuffer() || Buffer.alloc(0)).toString('latin1') }); // surové bajty (soubory)
       const next = /name="_next"\r\n\r\n([^\r]+)/.exec(q.postData() || '');
       return r.fulfill({ status: 302, headers: { location: next ? next[1] : '/' }, body: '' });
     });
   }
-  async function quoteForm(page, url) {
+  async function quoteForm(page, url, noFiles) {
     await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
     await page.goto(url); await openJarda(page);
     await page.click('.pmj-chip-hot'); await page.click('.pmj-chip:has-text("Nacenit seznam nebo fotku")'); await page.waitForSelector('.pmj-form');
     await page.fill('.pmj-form input[type=tel]', '000 000 000');
-    await page.setInputFiles('.pmj-form input[type=file]', [{ name: 'foto.png', mimeType: 'image/png', buffer: PNG }]); await page.waitForTimeout(300);
+    if (!noFiles) { await page.setInputFiles('.pmj-form input[type=file]', [{ name: 'foto.png', mimeType: 'image/png', buffer: PNG }]); await page.waitForTimeout(300); }
   }
   await step('výpadek FormSubmitu (522): neodejde se ze stránky, „NEBYLA odeslána“, připravený e-mail se seznamem, nic jako odeslané', async () => {
     await formsubmit(pg, 'hang');
@@ -208,22 +209,31 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     await pg.click('button:has-text("Zkopírovat poptávku")'); await pg.waitForTimeout(200);
     assert.match(await pg.textContent('button:has-text("Zkopír")'), /Zkopírováno|použijte e-mail/);
   });
-  await step('FormSubmit funguje (AJAX): přijato až po odpovědi success, české potvrzení na stránce, přílohy odeslány, seznam smazán', async () => {
+  await step('s přílohou: klasický multipart s _captcha=false a souborem, návrat přes _next → české potvrzení, jeden POST', async () => {
     await formsubmit(pg, 'ok'); window_log.length = 0;
     await quoteForm(pg, B + '?page=product&live=1');
+    await Promise.all([pg.waitForNavigation(), pg.click('.pmj-send')]);
+    await pg.waitForSelector('.pmj-bot:has-text("jsme přijali")', { timeout: 10000 });
+    assert.equal(window_log.length, 1, 'právě jeden POST');
+    assert.match(window_log[0].url, /^https:\/\/formsubmit\.co\/info@promontaz\.cz$/);
+    const body = window_log[0].body;
+    assert.match(body, /name="_captcha"\r\n\r\nfalse/); assert.match(body, /name="attachment"; filename="foto\.png"/); assert.match(body, /Content-Type: image\/png/);
+    assert.ok(body.includes(PNG.toString('latin1').slice(0, 8)), 'obsah souboru v těle požadavku');
+    assert.ok((await events(pg)).includes('jarda_quote_accepted'));
+    assert.equal(await pg.evaluate(() => localStorage.pmj2_list || null), null);
+  });
+  await step('bez přílohy: AJAX, potvrzení až po odpovědi success, zákazník zůstává na stránce', async () => {
+    await formsubmit(pg, 'ok'); window_log.length = 0;
+    await quoteForm(pg, B + '?page=product&live=1', true);
     await pg.click('.pmj-send');
     await pg.waitForSelector('.pmj-bot:has-text("jsme přijali")', { timeout: 10000 });
-    assert.match(pg.url(), /demo\.html\?page=product/); // zákazník zůstal na webu
-    assert.equal(window_log.length, 1, 'právě jeden POST');
-    assert.match(window_log[0].url, /formsubmit\.co\/ajax\/info@promontaz\.cz/);
-    assert.match(window_log[0].body, /filename="foto\.png"/); assert.match(window_log[0].body, /name="Seznam materiálu"/);
-    const ev = await events(pg); assert.ok(ev.includes('jarda_quote_accepted') && ev.includes('jarda_quote_submit'));
-    assert.equal(await pg.evaluate(() => localStorage.pmj2_list || null), null);
+    assert.match(pg.url(), /demo\.html\?page=product/);
+    assert.equal(window_log.length, 1); assert.match(window_log[0].url, /formsubmit\.co\/ajax\/info@promontaz\.cz/);
     assert.equal(await pg.$('.pmj-form'), null, 'formulář po přijetí zmizí');
   });
   await step('služba poptávku odmítne ({"success":"false"}): nic se nepotvrdí, záložní e-mail, údaje zůstávají', async () => {
     await formsubmit(pg, 'reject'); window_log.length = 0;
-    await quoteForm(pg, B + '?page=product&live=1');
+    await quoteForm(pg, B + '?page=product&live=1', true);
     await pg.click('.pmj-send');
     await pg.waitForSelector('.pmj-bot:has-text("nepřijala")', { timeout: 10000 });
     assert.match(await lastBot(pg), /NEBYLA odeslána/); assert.match(await lastBot(pg), /needs Activation/);
@@ -234,7 +244,7 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
   });
   await step('služba neodpoví (časový limit): „nepodařilo se ověřit“, žádné automatické opakování, údaje zůstávají', async () => {
     await formsubmit(pg, 'nores'); window_log.length = 0;
-    await quoteForm(pg, B + '?page=product&live=1');
+    await quoteForm(pg, B + '?page=product&live=1', true);
     await pg.evaluate(() => { window.PMJ_APP_CONFIG_OVERRIDE = { quote: { send_timeout_ms: 1500 } }; });
     await pg.click('.pmj-send');
     await pg.waitForSelector('.pmj-bot:has-text("Nepodařilo se ověřit")', { timeout: 100000 });
@@ -258,20 +268,20 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.equal(posts.length, 0);
     await np.close();
   });
-  await step('/nacenit-material/ s AJAX režimem: po success návrat na vlastní poděkování formuláře (?odeslano=ID), jeden POST s přílohou', async () => {
+  await step('/nacenit-material/ s nacenit_direct: _captcha=false, příloha v POSTu, návrat na vlastní poděkování (?odeslano=ID)', async () => {
     const np = await ctx.newPage(); await formsubmit(np, 'ok'); window_log.length = 0;
-    await np.addInitScript(() => { window.__ajaxMode = 1; });
-    await np.goto(B.replace('demo.html', 'nacenit-material/') + '?ajax=1'); await np.waitForFunction(() => window.__pmjGuardOn, null, { timeout: 15000 });
-    await np.setInputFiles('#pmq-files', [{ name: 'seznam.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') }]);
+    await np.goto(B.replace('demo.html', 'nacenit-material/') + '?direct=1'); await np.waitForFunction(() => window.__pmjGuardOn, null, { timeout: 15000 });
+    await np.setInputFiles('#pmq-files', [{ name: 'rozpocet.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') }]);
     await np.click('#pmq-send'); await np.waitForURL(/odeslano=PM-261107-ABCDEF/, { timeout: 15000 });
-    assert.equal(window_log.length, 1); assert.match(window_log[0].url, /\/ajax\/info@promontaz\.cz/); assert.match(window_log[0].body, /filename="seznam\.pdf"/);
+    assert.equal(window_log.length, 1); assert.match(window_log[0].url, /^https:\/\/formsubmit\.co\/info@promontaz\.cz$/);
+    assert.match(window_log[0].body, /name="_captcha"\r\n\r\nfalse/); assert.match(window_log[0].body, /filename="rozpocet\.pdf"/); assert.match(window_log[0].body, /%PDF-1\.4 test/);
     await np.close();
   });
-  await step('/nacenit-material/ s AJAX režimem: služba odmítne → nic se nepotvrdí, box „nepřijala“, údaje zůstávají', async () => {
-    const np = await ctx.newPage(); await formsubmit(np, 'reject');
-    await np.goto(B.replace('demo.html', 'nacenit-material/') + '?ajax=1'); await np.waitForFunction(() => window.__pmjGuardOn, null, { timeout: 15000 });
-    await np.click('#pmq-send'); await np.waitForSelector('#pmj-guard-box', { timeout: 15000 });
-    assert.match(await np.innerText('#pmj-guard-box'), /nepřijala/); assert.ok(!/odeslano/.test(np.url())); assert.equal(await np.inputValue('#pmq-message'), '20× vrut 5x60');
+  await step('/nacenit-material/ bez nacenit_direct: odeslání beze změny (bez _captcha)', async () => {
+    const np = await ctx.newPage(); await formsubmit(np, 'ok'); window_log.length = 0;
+    await np.goto(B.replace('demo.html', 'nacenit-material/')); await np.waitForFunction(() => window.__pmjGuardOn, null, { timeout: 15000 });
+    await np.click('#pmq-send'); await np.waitForURL(/odeslano=/, { timeout: 15000 });
+    assert.ok(!/name="_captcha"/.test(window_log[0].body));
     await np.close();
   });
   await step('/nacenit-material/ bez zapnutí v configu: ochrana se nenačte (formulář beze změny)', async () => {

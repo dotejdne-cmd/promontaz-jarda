@@ -5,7 +5,7 @@
   <input id="pmq-files" type="file" multiple><button type="submit" id="pmq-send">Odeslat poptávku</button>
 </div></section>
 <script>
-  window.PMJ_CONFIG_OVERRIDE = { formsubmit_guard: { nacenit: true, nacenit_ajax: /[?&]ajax=1/.test(location.search) } };
+  window.PMJ_CONFIG_OVERRIDE = { formsubmit_guard: { nacenit: true, nacenit_direct: /[?&]direct=1/.test(location.search) } };
   document.getElementById('pmq-send').onclick = function () {
     var b = this; b.disabled = true; b.textContent = 'Odesílám…';
     var r = document.createElement('form'); r.method = 'post'; r.action = 'https://formsubmit.co/info@promontaz.cz'; r.enctype = 'multipart/form-data'; r.style.display = 'none';
@@ -17,5 +17,5 @@
     document.body.appendChild(r); HTMLFormElement.prototype.submit.call(r);
   };
 </script>
-<script defer src="/dist/3.0.5/jarda.min.js"></script>
+<script defer src="/dist/3.0.6/jarda.min.js"></script>
 </body></html>

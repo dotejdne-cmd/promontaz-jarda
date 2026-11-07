@@ -475,6 +475,17 @@ window.__pmjApp = function (X) {
         submitAt = Date.now();
         send.textContent = files.length ? 'Odesílám poptávku a přílohy…' : 'Odesílám…';
         if (C.dry_run) { location.href = nextUrl(id); return; }
+        if (files.length) {
+          /* S přílohami: klasický multipart POST. AJAX endpoint FormSubmitu soubory nedoručuje (ověřeno ve schránce),
+             _captcha=false → FormSubmit odpoví 302 přímo na _next (?pmj_sent=ID) → české potvrzení na webu. */
+          hid('_captcha', 'false');
+          setTimeout(function () { unlock(false); }, 15000); // stránka se neopustila (síť) → znovu povolit
+          document.body.appendChild(F);
+          F.__pmjOk = 1; // ochrana formulářů (guard) už nekontroluje znovu
+          HTMLFormElement.prototype.submit.call(F);
+          return;
+        }
+        // Bez příloh: AJAX (okamžitá odpověď služby, zákazník zůstává na stránce)
         var fd = new FormData(F), ctl = window.AbortController ? new AbortController() : null;
         var tmo = setTimeout(function () { if (ctl) ctl.abort(); }, (A.quote && A.quote.send_timeout_ms) || 90000);
         var ft = formText(F), names = files.map(function (f) { return f.name; });

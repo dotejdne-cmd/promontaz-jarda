@@ -116,8 +116,8 @@
     "cart_quote_chip": true
   },
   "formsubmit_guard": {
-    "_readme": "Ochrana formuláře /nacenit-material/: nacenit = kontrola služby před odesláním, při výpadku připravený e-mail. nacenit_ajax = odeslání přes AJAX FormSubmitu (bez reCAPTCHA stránky, české poděkování na webu po odpovědi success). Jarda má obojí vždy.",
+    "_readme": "Ochrana formuláře /nacenit-material/: nacenit = kontrola služby před odesláním, při výpadku připravený e-mail. nacenit_direct = odeslání bez anglické stránky reCAPTCHA (_captcha=false) → přímý návrat na české poděkování formuláře, přílohy beze změny. Jarda má obojí vždy.",
     "nacenit": true,
-    "nacenit_ajax": false
+    "nacenit_direct": false
   }
 }

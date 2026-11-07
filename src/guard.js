@@ -13,22 +13,16 @@ window.__pmjGuard = function (X) {
     if (f.__pmjOk || !/^https:\/\/formsubmit\.co\//.test(f.action || '')) return orig.call(f);
     probe(f.action, 6000).then(function (ok) {
       if (!ok) { showBox(f); return; }
-      if (!(X.C.formsubmit_guard && X.C.formsubmit_guard.nacenit_ajax)) { f.__pmjOk = 1; orig.call(f); return; }
-      /* AJAX režim: FormSubmit odpoví {"success":"true"} bez reCAPTCHA stránky a bez závislosti na _next;
-         po potvrzení se zákazník vrátí na vlastní české poděkování formuláře (hodnota _next, např. ?odeslano=ID). */
-      var next = f.querySelector('[name="_next"]'), ctl = window.AbortController ? new AbortController() : null;
-      var tmo = setTimeout(function () { if (ctl) ctl.abort(); }, 90000);
-      fetch(String(f.action).replace(/^(https:\/\/formsubmit\.co\/)(?!ajax\/)/, '$1ajax/'), { method: 'POST', body: new FormData(f), headers: { Accept: 'application/json' }, credentials: 'omit', signal: ctl ? ctl.signal : undefined })
-        .then(function (r) { return r.text().then(function (t) { var j = null; try { j = JSON.parse(t); } catch (e) {} return { ok: r.ok, j: j }; }); })
-        .then(function (res) {
-          clearTimeout(tmo);
-          if (res.ok && res.j && (res.j.success === true || res.j.success === 'true')) { location.href = next && next.value ? next.value : location.pathname + '?odeslano=1'; return; }
-          showBox(f, 'rejected', res.j && res.j.message);
-        }, function () { clearTimeout(tmo); showBox(f, 'unknown'); });
+      /* nacenit_direct: _captcha=false → FormSubmit nezobrazí anglickou stránku reCAPTCHA a odpoví 302 přímo na _next
+         formuláře (?odeslano=ID = jeho české poděkování). Přílohy jdou klasickým multipart odesláním jako dosud. */
+      if (X.C.formsubmit_guard && X.C.formsubmit_guard.nacenit_direct && !f.querySelector('[name="_captcha"]')) {
+        var cap = document.createElement('input'); cap.type = 'hidden'; cap.name = '_captcha'; cap.value = 'false'; f.appendChild(cap);
+      }
+      f.__pmjOk = 1; orig.call(f);
     });
   };
 
-  function showBox(f, kind, msg) {
+  function showBox(f, kind, msg) { // kind: výpadek (výchozí)
     var ft = formText(f), idEl = f.querySelector('[name="Číslo poptávky"]'), id = idEl ? idEl.value : 'bez čísla';
     var body = mailBody(id, ft.text, ft.files), subj = (/[?&]pmq=test/.test(location.search) ? 'TEST – ' : '') + 'Poptávka ' + id + ' (záložní e-mail)';
     if (f.parentNode) f.parentNode.removeChild(f);
