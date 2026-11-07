@@ -50,8 +50,8 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
   await step('zavaděč: při načtení jen zavaděč, config a logo (žádná aplikace, styly ani index)', async () => {
     await pg.goto(B + '?page=product'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(500);
     const w = reqs.filter(u => /dist\/3|config|assets|index\.json/.test(u));
-    assert.deepEqual(w.sort(), ['assets/jarda-128.webp', 'config.json', 'dist/3.0.1/jarda.min.js']);
-    assert.equal(await pg.$eval('.pmj-root', e => e.dataset.version), '3.0.1');
+    assert.deepEqual(w.sort(), ['assets/jarda-128.webp', 'config.json', 'dist/3.0.2/jarda.min.js']);
+    assert.equal(await pg.$eval('.pmj-root', e => e.dataset.version), '3.0.2');
   });
   await step('otevření: stáhne aplikaci + config.app.json, kontextové čipy, fokus do pole', async () => {
     await openJarda(pg);
@@ -166,6 +166,12 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.ok(g.length > 0);
     for (const c of g) { assert.equal(c[0], 'event'); assert.equal(c[2].send_to, 'GA4'); assert.ok(!/@|722 111 222|\d{3} \d{3} \d{3}/.test(JSON.stringify(c[2])), JSON.stringify(c)); }
   });
+  await step('žádný <form> uvnitř Jardy (automatické sledování formulářů gtag → Ads)', async () => {
+    await pg.click('.pmj-fab').catch(() => {});
+    assert.equal(await pg.$$eval('#pmj-jarda form', f => f.length), 0);
+    await pg.keyboard.press('Escape');
+    await pg.click('.pmj-fab'); await pg.waitForSelector('.pmj-panel:not([hidden])');
+  });
   await step('Esc zavře panel a vrátí fokus na ikonu', async () => {
     await pg.keyboard.press('Escape');
     assert.ok(await pg.isHidden('.pmj-panel'));
@@ -225,11 +231,11 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     await pg.goto(B + '?page=category&ch=1'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
     assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
   });
-  await step('kanál: ?pmj_ver=3.0.1 zapne v3 jen v tomto prohlížeči a pamatuje si to', async () => {
-    await pg.goto(B + '?page=category&ch=1&pmj_ver=3.0.1'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.1' });
+  await step('kanál: ?pmj_ver=3.0.2 zapne v3 jen v tomto prohlížeči a pamatuje si to', async () => {
+    await pg.goto(B + '?page=category&ch=1&pmj_ver=3.0.2'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.2' });
     await pg.goto(B + '?page=category&ch=1'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.1' });
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.2' });
     const ctx2 = await br.newContext(); const o = await ctx2.newPage();  // jiný prohlížeč = jiný zákazník
     await ctxSetup(ctx2, errs); await o.goto(B + '?page=category&ch=1'); await o.waitForSelector('.pmj-fab'); await o.waitForTimeout(800);
     assert.deepEqual(await inst(o), { fabs: 1, ver: 'v2' }); await ctx2.close();
@@ -241,12 +247,12 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
     assert.equal(await pg.evaluate(() => localStorage.pmj_ver || null), null);
     await pg.goto(B + '?page=category&pmj_ver=9.9.9'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200); // přímý řádek v3
-    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.1' });
+    assert.deepEqual(await inst(pg), { fabs: 1, ver: '3.0.2' });
   });
   await step('kanál: v3 → ?pmj_ver=2 načte v2; dva řádky v Zápatí = stále jedna instance', async () => {
     await pg.goto(B + '?page=category&pmj_ver=2'); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(800);
     assert.deepEqual(await inst(pg), { fabs: 1, ver: 'v2' });
-    for (const v of ['2', '3.0.1']) {
+    for (const v of ['2', '3.0.2']) {
       await pg.goto(B + '?page=category&ch=1&both=1&pmj_ver=' + v); await pg.waitForSelector('.pmj-fab'); await pg.waitForTimeout(1200);
       assert.equal((await inst(pg)).fabs, 1, 'pmj_ver=' + v);
     }

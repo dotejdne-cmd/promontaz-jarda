@@ -47,12 +47,12 @@ const evParams = hits => hits.flatMap(h => { const q = h.u.split('?')[1] || '', 
     await ctx.close();
   });
   let tester;
-  await step('nové Zápatí + ?pmj_ver=3.0.1: v3 jen v tomto prohlížeči, platí i na dalších stránkách', async () => {
+  await step('nové Zápatí + ?pmj_ver=3.0.2: v3 jen v tomto prohlížeči, platí i na dalších stránkách', async () => {
     tester = await ctxFor(br, { viewport: { width: 1366, height: 860 } }, 'stable'); const p = await tester.ctx.newPage();
-    await p.goto(P + '?pmj_ver=3.0.1&pmj=test', { waitUntil: 'load' }); await p.waitForSelector('.pmj-fab', { timeout: 20000 }); await p.waitForTimeout(800);
-    let i = await inst(p); assert.equal(i.fabs, 1); assert.equal(i.ver, '3.0.1');
+    await p.goto(P + '?pmj_ver=3.0.2&pmj=test', { waitUntil: 'load' }); await p.waitForSelector('.pmj-fab', { timeout: 20000 }); await p.waitForTimeout(800);
+    let i = await inst(p); assert.equal(i.fabs, 1); assert.equal(i.ver, '3.0.2');
     await p.goto('https://www.promontaz.cz/spojovaci-material/', { waitUntil: 'load' }); await p.waitForSelector('.pmj-fab', { timeout: 20000 }); await p.waitForTimeout(800);
-    i = await inst(p); assert.equal(i.ver, '3.0.1'); assert.equal(i.fabs, 1);
+    i = await inst(p); assert.equal(i.ver, '3.0.2'); assert.equal(i.fabs, 1);
     const other = await ctxFor(br, {}, 'stable'); const o = await other.ctx.newPage();
     await o.goto('https://www.promontaz.cz/spojovaci-material/', { waitUntil: 'load' }); await o.waitForSelector('.pmj-fab', { timeout: 20000 }); await o.waitForTimeout(800);
     assert.equal((await inst(o)).ver, 'v2', 'jiný prohlížeč musí mít v2'); await other.ctx.close();
@@ -60,17 +60,20 @@ const evParams = hits => hits.flatMap(h => { const q = h.u.split('?')[1] || '', 
   await step('v3 ze skutečných Pages: hledání, fotky, košík, sada, bez chyb', async () => {
     const p = await tester.ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
     await p.goto('https://www.promontaz.cz/montazni-sady/sada-tesarske-kovani---1-000-vrutu-4-8--35-40-bit-tx20/', { waitUntil: 'load' });
-    await p.waitForSelector('.pmj-fab', { timeout: 20000 }); await p.click('.pmj-fab'); await p.waitForSelector('.pmj-chip');
+    await p.waitForSelector('.pmj-fab', { timeout: 45000 }).catch(async e => { await p.screenshot({ path: (process.env.SHOTS || '/tmp') + '/live-sada-fail.png' }); throw new Error(e.message.split('\n')[0] + ' | root=' + await p.evaluate(() => !!document.querySelector('.pmj-root')) + ' __pmj=' + await p.evaluate(() => window.__pmj)); });
+    await p.click('.pmj-fab'); await p.waitForSelector('.pmj-chip');
     await p.click('.pmj-chip:has-text("Co obsahuje sada")'); await p.waitForSelector('.pmj-bot:last-of-type .pmj-cards', { timeout: 60000 });
     assert.equal(await p.$$eval('.pmj-bot:last-of-type .pmj-card', a => a.length), 3);
     await p.fill('.pmj-q', 'osb 18'); await p.press('.pmj-q', 'Enter'); await p.waitForTimeout(1500);
     const imgs = await p.$$eval('.pmj-bot:last-of-type .pmj-thumb', a => a.map(i => i.naturalWidth));
     assert.ok(imgs.length && imgs.every(w => w === 100), JSON.stringify(imgs));
     await p.click('.pmj-bot:last-of-type button:has-text("Do košíku")'); await p.waitForSelector('button:has-text("✓ V košíku")', { timeout: 10000 });
+    await p.click('.pmj-chip:has-text("Nacenit seznam nebo fotku")'); await p.waitForSelector('.pmj-form');
+    await p.fill('.pmj-form textarea', '20× vrut 5x60'); await p.fill('.pmj-form input[type=email]', 'test@example.com'); await p.press('.pmj-form input[type=email]', 'Tab');
     assert.deepEqual(errs, []);
   });
   await step('GA4 před souhlasem: Consent Mode „denied“ (gcs=G1…0x), události Jardy bez osobních údajů', async () => {
-    for (const old of tester.ctx.pages()) await old.close(); // odeslat dávky a ukončit staré karty
+    for (const old of tester.ctx.pages()) { await old.goto('about:blank').catch(() => {}); await old.close(); } // odeslat dávky (pagehide) a zavřít
     const ev = evParams(tester.hits);
     results.push(`    zachycené požadavky GA4 s událostí Jardy: ${ev.length}`);
     assert.ok(ev.length > 0, 'gtag neodeslal žádnou událost Jardy (je načtený gtag.js?)');
@@ -79,19 +82,25 @@ const evParams = hits => hits.flatMap(h => { const q = h.u.split('?')[1] || '', 
       assert.ok(!/%40|@|722%20|\+420/.test(l), 'osobní údaj v ' + l.slice(0, 200));
     }
     assert.ok(tester.hits.filter(h => /googleadservices|doubleclick|google\.com\/pagead/.test(h.u) && /jarda/.test(h.u + h.body)).length === 0, 'Jarda nesmí volat Ads');
+    const formEv = tester.hits.filter(h => /en=form_(start|submit)/.test(h.u + '\n' + h.body));
+    assert.equal(formEv.length, 0, 'form_start/form_submit z Jardy: ' + formEv.map(h => h.u.slice(0, 70)).join(' | '));
   });
   await step('GA4 po „Souhlasím“: souhlas se propíše (gcs=G111), Ads konverze z Jardy žádná', async () => {
     for (const old of tester.ctx.pages()) await old.close();
     const p = await tester.ctx.newPage(); tester.hits.length = 0;
     await p.goto('https://www.promontaz.cz/spojovaci-material/', { waitUntil: 'load' });
-    const acc = await p.$('button[data-testid="buttonCookiesAccept"]'); assert.ok(acc, 'cookie lišta'); await acc.click(); await p.waitForTimeout(800);
+    const acc = await p.waitForSelector('button[data-testid="buttonCookiesAccept"]', { timeout: 10000 }).catch(() => null); assert.ok(acc, 'cookie lišta'); await acc.click(); await p.waitForTimeout(800);
     await p.waitForSelector('.pmj-fab', { timeout: 20000 }); await p.click('.pmj-fab'); await p.waitForSelector('.pmj-chip');
     await p.fill('.pmj-q', 'vrut 5x60'); await p.press('.pmj-q', 'Enter'); await p.waitForSelector('.pmj-card', { timeout: 60000 }); await p.waitForTimeout(2500);
+    await p.goto('about:blank'); await new Promise(r => setTimeout(r, 2000)); // gtag odešle dávku při opuštění stránky (pagehide)
     const ev = evParams(tester.hits);
+    results.push('    po souhlasu: ' + ev.map(l => (l.match(/en=[^&]*/) || [''])[0] + ' ' + (l.match(/gcs=[^&]*/) || [''])[0]).join(', '));
     assert.ok(ev.some(l => /en=jarda_search/.test(l)), 'jarda_search');
     assert.ok(ev.every(l => /gcs=G111/.test(l)), ev.map(l => (l.match(/gcs=[^&]*/) || [''])[0]).join(','));
     const ads = tester.hits.filter(h => /googleadservices|doubleclick|google\.com\/(pagead|ccm)/.test(h.u) && /jarda/i.test(decodeURIComponent(h.u + h.body)));
     assert.equal(ads.length, 0);
+    const formEv = tester.hits.filter(h => /en=form_(start|submit)/.test(h.u + '\n' + h.body));
+    assert.equal(formEv.length, 0, 'Jarda nesmí spouštět form_start/form_submit (jdou i do Ads): ' + formEv.map(h => h.u.slice(0, 60)).join(' | '));
     const tids = [...new Set(evParams(tester.hits).map(l => (l.match(/tid=([^&]*)/) || [])[1]))];
     results.push('    události Jardy šly jen na: ' + tids.join(', '));
     assert.deepEqual(tids, ['G-3KY8CWHMHY']);

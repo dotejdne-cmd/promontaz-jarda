@@ -364,13 +364,15 @@ window.__pmjApp = function (X) {
     var note = h('textarea', { rows: '2', class: 'pmj-input', placeholder: 'Např. firma, způsob dodání, poznámka k materiálu' });
     var hp = h('input', { type: 'text', tabindex: '-1', autocomplete: 'off' });
     var err = h('p', { class: 'pmj-err', role: 'alert', id: 'pmj-err' });
-    var send = h('button', { type: 'submit', class: 'pmj-btn pmj-btn-primary pmj-send', text: 'Odeslat k nacenění' });
+    var send = h('button', { type: 'button', class: 'pmj-btn pmj-btn-primary pmj-send', text: 'Odeslat k nacenění' });
     formSend = send;
     [['email', email], ['tel', tel], ['zip', zip], ['ico', ico], ['term', term], ['note', note]].forEach(function (x) { if (draft[x[0]]) x[1].value = draft[x[0]]; });
     var more = h('details', { class: 'pmj-more' }, [h('summary', { text: 'Firma, termín, poznámka' }),
       field('IČO', ico, 'Vyplňte, pokud chcete nabídku na firmu.', 1), field('Požadovaný termín', term, null, 1), field('Poznámka', note, null, 1)]);
     if (draft.ico || draft.term || draft.note) more.open = true;
-    var form = h('form', { class: 'pmj-form', novalidate: true }, [
+    /* Záměrně <div role=form>, ne <form>: automatické sledování formulářů v gtag by jinak posílalo form_start/form_submit
+       z Jardy do GA4 i Google Ads. Do FormSubmitu se odesílá samostatný skrytý <form> přes .submit() (bez události submit). */
+    var form = h('div', { class: 'pmj-form', role: 'form', 'aria-label': T('quote_title') || 'Poptávka k nacenění' }, [
       h('p', { class: 'pmj-title', text: T('quote_title') }), p(T('quote_short'), 'pmj-small'),
       field('Seznam materiálu', ta, 'Název nebo kód a množství. Upravit můžete i tady.'),
       field('Přílohy', fin, 'Fotka, PDF, Excel (XLSX) nebo CSV. Nejvýše ' + maxFiles + ' souborů, dohromady ' + (Qc.max_total_mb || 10) + ' MB.', 1), flist,
@@ -424,8 +426,9 @@ window.__pmjApp = function (X) {
     form.addEventListener('input', saveDraft);
     form.addEventListener('change', saveDraft);
 
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
+    send.addEventListener('click', doSubmit);
+    form.addEventListener('keydown', function (e) { var t = e.target; if (e.key === 'Enter' && t.tagName === 'INPUT' && t.type !== 'file') { e.preventDefault(); doSubmit(); } });
+    function doSubmit() {
       if (submitting) return;
       var em = email.value.trim(), ph = tel.value.trim(), z = zip.value.replace(/\s/g, ''), ic = ico.value.replace(/\s/g, ''), bad = null, msg = '';
       if (!ta.value.trim() && !files.length) { msg = 'Napište, co nacenit, nebo přiložte fotku či seznam.'; bad = ta; }
@@ -467,7 +470,7 @@ window.__pmjApp = function (X) {
       document.body.appendChild(F);
       if (C.dry_run) { location.href = nextUrl(id); return; }
       HTMLFormElement.prototype.submit.call(F);
-    });
+    }
     say([form], 'pmj-bot', 'quote');
     track('jarda_quote_start', { list_count: list.length, quote_source: source || '' });
     if (draft.text || draft.email || draft.tel) say([p(T('draft_restored'), 'pmj-small')], 'pmj-bot', 'draftnote');
@@ -562,6 +565,7 @@ window.__pmjApp = function (X) {
   /* ---------- panel ---------- */
   function build() {
     input = h('input', { type: 'text', class: 'pmj-input pmj-q', placeholder: T('input_placeholder'), 'aria-label': 'Zpráva pro poradce', autocomplete: 'off', enterkeyhint: 'send', maxlength: '120' });
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) onText(e); });
     log = h('div', { class: 'pmj-log', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions' });
     countEl = h('span');
     var n = getList().length; countEl.textContent = n ? ' (' + n + ')' : '';
@@ -573,7 +577,7 @@ window.__pmjApp = function (X) {
         h('button', { type: 'button', class: 'pmj-x', 'aria-label': 'Zavřít poradce', text: '×', onclick: close })
       ]),
       log,
-      h('form', { class: 'pmj-bar', onsubmit: onText }, [input, h('button', { type: 'submit', class: 'pmj-go', 'aria-label': 'Odeslat', text: '➜' })]),
+      h('div', { class: 'pmj-bar', role: 'search' }, [input, h('button', { type: 'button', class: 'pmj-go', 'aria-label': 'Odeslat', text: '➜', onclick: onText })]),
       C.auto_open && C.auto_open.enabled ? h('div', { class: 'pmj-foot' }, [h('button', { type: 'button', class: 'pmj-linkbtn', text: T('no_auto') || 'Neotevírat automaticky',
         onclick: function (e) { st('localStorage', 'noauto', '1'); track('jarda_noauto', {}); e.target.disabled = true; e.target.textContent = 'Automatické otevírání vypnuto'; } })]) : null
     ]);
