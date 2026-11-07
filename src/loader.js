@@ -131,11 +131,21 @@ import { rootOf, wanted, load } from './channel.js';
     }
   }
 
+  /* ochrana formuláře /nacenit-material/ při výpadku FormSubmitu – jen na té stránce a jen po zapnutí v config.json */
+  function guard() {
+    var g = C.formsubmit_guard;
+    if (!g || !g.nacenit || !/^\/nacenit-material\//.test(location.pathname) || window.__pmjGuardOn) return;
+    var s = h('script', { src: ROOT + 'dist/' + VERSION + '/guard.min.js', async: true });
+    s.onload = function () { if (window.__pmjGuard) window.__pmjGuard({ C: C, track: track }); };
+    document.head.appendChild(s);
+  }
+
   function start() {
     var o = window.PMJ_CONFIG_OVERRIDE; // jen demo a testy
     fetchJSON(ROOT + 'config.json', 6000).then(function (j) { merge(C, j); }, function () {}).then(function () {
       if (o) merge(C, o);
       C.__version = VERSION; C.__test = TEST;
+      guard();
       render();
     });
   }

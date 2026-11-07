@@ -5,7 +5,7 @@
 
 export var EVENTS = ['jarda_open', 'jarda_teaser_show', 'jarda_chip_click', 'jarda_intent', 'jarda_search', 'jarda_search_no_results',
   'jarda_product_click', 'jarda_add_to_list', 'jarda_add_to_cart', 'jarda_list_view', 'jarda_quote_start', 'jarda_quote_submit',
-  'jarda_quote_accepted', 'jarda_quote_unconfirmed', 'jarda_whatsapp', 'jarda_contact_click', 'jarda_noauto'];
+  'jarda_quote_accepted', 'jarda_quote_unconfirmed', 'jarda_quote_fallback', 'jarda_quote_fallback_click', 'jarda_whatsapp', 'jarda_contact_click', 'jarda_noauto'];
 
 var PII = [/\S+@\S+\.\S+/g, /(\+?420[\s-]?)?\b\d{3}[\s-]?\d{3}[\s-]?\d{3}\b/g];
 export function clean(v) {

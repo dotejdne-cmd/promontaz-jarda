@@ -29,7 +29,8 @@
       "2w": "Do 2 týdnů",
       "1m": "Do měsíce"
     },
-    "unconfirmed_after_s": 20
+    "unconfirmed_after_s": 20,
+    "probe_timeout_ms": 6000
   },
   "texts_v3": {
     "results_partial": "Přesně pro „{q}“ nic nevidím. Slovo „{w}“ v katalogu nenacházím.",
@@ -54,7 +55,9 @@
     "quote_accepted": "Děkujeme, poptávku č. {id} jsme přijali. Ozveme se obvykle do 24 hodin.",
     "quote_unconfirmed": "Poptávka č. {id} se možná neodeslala (stránka se nevrátila z odesílací služby). Seznam máte uložený – zkuste ji odeslat znovu, nebo nám napište.",
     "draft_restored": "Obnovil jsem rozepsanou poptávku.",
-    "offline": "Nejste připojeni k internetu. Seznam zůstane uložený, odešlete ho po připojení."
+    "offline": "Nejste připojeni k internetu. Seznam zůstane uložený, odešlete ho po připojení.",
+    "fallback_title": "Odesílací služba teď neodpovídá. Poptávka NEBYLA odeslána – seznam i údaje zůstávají uložené.",
+    "fallback_text": "Pošlete ji prosím e-mailem, připravili jsme ho za vás. Stačí ho odeslat ze svého e-mailu."
   },
   "intent_rules": {
     "doprava": {

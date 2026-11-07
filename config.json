@@ -114,5 +114,9 @@
   "context": {
     "teaser_on_cart": false,
     "cart_quote_chip": true
+  },
+  "formsubmit_guard": {
+    "_readme": "Ochrana formuláře /nacenit-material/ při výpadku FormSubmitu (kontrola služby před odesláním, jinak připravený e-mail). Zapnutí: \"nacenit\": true. Jarda ji má vždy.",
+    "nacenit": false
   }
 }

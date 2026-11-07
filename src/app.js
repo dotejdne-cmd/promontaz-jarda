@@ -2,6 +2,7 @@
 import { st, stJSON, h, abs, fetchJSON, merge } from './util.js';
 import { buildIndexAsync, search, prepSynonyms, thumbUrl } from './search.js';
 import { prepRules, classify } from './intent.js';
+import { probe, formText, mailto, copyText, mailBody } from './fallback.js';
 
 window.__pmjApp = function (X) {
   var C = X.C, SD = X.SD || {}, track = X.track, root = X.root, fab = X.fab;
@@ -342,7 +343,7 @@ window.__pmjApp = function (X) {
   }
   function nextUrl(id) { var u = new URL(location.href); u.searchParams.set('pmj_sent', id); u.hash = ''; return u.href; }
 
-  var files = [], submitting = false, formSend = null;
+  var files = [], submitting = false, formSend = null, forceSend = false;
   function field(label, control, hint, opt) {
     return h('label', { class: 'pmj-field' }, [h('span', { class: 'pmj-label' }, [label, opt ? h('span', { class: 'pmj-opt', text: ' (nepovinné)' }) : null]), control, hint ? h('span', { class: 'pmj-hint', text: hint }) : null]);
   }
@@ -464,12 +465,25 @@ window.__pmjApp = function (X) {
       });
       if (okFiles !== files.length) { err.textContent = 'Přílohy se nepodařilo připojit. Zkuste jiný prohlížeč, nebo je pošlete na ' + contact().email + '.'; return; }
       saveDraft();
-      st('sessionStorage', 'pending', JSON.stringify({ id: id, t: Date.now(), n: n, f: files.length }));
-      track('jarda_quote_submit', { lead_id: id, items_count: n, attachments_count: files.length, has_zip: !!z, has_ico: !!ic, quote_source: source || '' });
       submitting = true; send.disabled = true; send.textContent = 'Odesílám…';
-      document.body.appendChild(F);
-      if (C.dry_run) { location.href = nextUrl(id); return; }
-      HTMLFormElement.prototype.submit.call(F);
+      var go = function () {
+        st('sessionStorage', 'pending', JSON.stringify({ id: id, t: Date.now(), n: n, f: files.length }));
+        track('jarda_quote_submit', { lead_id: id, items_count: n, attachments_count: files.length, has_zip: !!z, has_ico: !!ic, quote_source: source || '' });
+        submitAt = Date.now();
+        setTimeout(function () { unlock(false); }, 15000); // stránka se neopustila (síť, výpadek služby) → znovu povolit
+        document.body.appendChild(F);
+        F.__pmjOk = 1; // ochrana formulářů (guard) už nekontroluje znovu
+        if (C.dry_run) { location.href = nextUrl(id); return; }
+        HTMLFormElement.prototype.submit.call(F);
+      };
+      if (forceSend || C.dry_run) { forceSend = false; go(); return; }
+      /* Výpadek FormSubmitu (522) se pozná dřív, než zákazník opustí stránku → záložní e-mail místo chybové stránky */
+      probe(C.formsubmit_endpoint, (A.quote && A.quote.probe_timeout_ms) || 6000).then(function (ok) {
+        if (ok) return go();
+        submitting = false; send.disabled = false; send.textContent = 'Odeslat k nacenění';
+        var ft = formText(F);
+        fallbackBlock(id, ft.text, files.map(function (f) { return f.name; }), 'service_down', function () { forceSend = true; doSubmit(); });
+      });
     }
     say([form], 'pmj-bot', 'quote');
     track('jarda_quote_start', { list_count: list.length, quote_source: source || '' });
@@ -477,11 +491,17 @@ window.__pmjApp = function (X) {
     (list.length ? (email.value || tel.value ? send : email) : ta).focus();
   }
   /* návrat tlačítkem Zpět (bfcache, hlavně iOS Safari): odblokovat odeslání */
-  window.addEventListener('pageshow', function (e) {
-    if (!e.persisted) return;
+  /* Návrat ze stránky odesílací služby tlačítkem Zpět (bfcache, iOS Safari i při chybě služby, např. 522):
+     odblokovat tlačítko a hned ukázat, že se poptávka možná neodeslala (seznam zůstává). */
+  var submitAt = 0, LOADED = Date.now();
+  function unlock(note) {
+    if (!submitting) return;
     submitting = false;
     if (formSend) { formSend.disabled = false; formSend.textContent = 'Odeslat k nacenění'; }
-  });
+    if (note) checkUnconfirmed(true);
+  }
+  window.addEventListener('pageshow', function (e) { if (e.persisted) unlock(true); });
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && submitAt && Date.now() - submitAt > 2000) unlock(true); });
 
   /* Návrat z FormSubmitu na ?pmj_sent=ID = služba poptávku přijala (ne potvrzení doručení do schránky). */
   function handleReturn() {
@@ -500,12 +520,41 @@ window.__pmjApp = function (X) {
     });
   }
   /* Odeslání bez návratu (chyba FormSubmitu, zavřená stránka ověření, Zpět) → upozornit, seznam zůstává. */
-  function checkUnconfirmed() {
+  /* Záložní cesta: poptávka NEBYLA odeslána → připravený e-mail na info@, kopie do schránky, WhatsApp. */
+  function fallbackBlock(id, text, fileNames, reason, retry) {
+    var c = contact(), body = mailBody(id, text, fileNames), subj = (X.test ? 'TEST – ' : '') + 'Poptávka ' + id + ' (záložní e-mail)';
+    track('jarda_quote_fallback', { lead_id: id, reason: reason, attachments_count: fileNames.length });
+    var cp = btn('Zkopírovat poptávku', function () {
+      copyText(body).then(function (ok) { cp.textContent = ok ? '✓ Zkopírováno' : 'Kopírování nefunguje – použijte e-mail'; });
+      track('jarda_quote_fallback_click', { lead_id: id, channel: 'copy' });
+    });
+    var kids = [p(T('fallback_title') || 'Odesílací služba teď neodpovídá. Poptávka NEBYLA odeslána – seznam i údaje zůstávají uložené.', 'pmj-note'),
+      p(T('fallback_text') || 'Pošlete ji prosím e-mailem, připravili jsme ho za vás. Stačí ho odeslat ze svého e-mailu.')];
+    if (fileNames.length) kids.push(p('Přílohy do e-mailu přiložte ručně: ' + fileNames.join(', ') + '.', 'pmj-small'));
+    kids.push(actions([
+      link('Otevřít připravený e-mail', mailto(c.email, subj, body), 'pmj-btn-primary', false, function () { track('jarda_quote_fallback_click', { lead_id: id, channel: 'email' }); }),
+      cp, waButton('Poptávka ' + id + ' – formulář na webu nešel odeslat', 'fallback')]));
+    kids.push(p('Adresa: ' + c.email + ' · telefon ' + c.phoneLabel, 'pmj-small'));
+    if (retry) kids.push(h('p', { class: 'pmj-small' }, [h('button', { type: 'button', class: 'pmj-linkbtn', text: 'Zkusit přesto odeslat formulářem', onclick: function () { track('jarda_quote_fallback_click', { lead_id: id, channel: 'retry' }); retry(); } })]));
+    say(kids, 'pmj-bot', 'fallback');
+  }
+  function draftSummary() {
+    var d = stJSON('sessionStorage', 'draft', {}) || {}, l = [];
+    var list = listText(getList()); if (list) l.push('Seznam materiálu:\n' + list); else if (d.text) l.push('Seznam materiálu:\n' + d.text);
+    if (d.extra) l.push(d.extra);
+    [['tel', 'Telefon'], ['email', 'E-mail'], ['zip', 'PSČ dodání'], ['ico', 'IČO'], ['note', 'Poznámka']].forEach(function (x) { if (d[x[0]]) l.push(x[1] + ': ' + d[x[0]]); });
+    return l.join('\n');
+  }
+
+  function checkUnconfirmed(now) {
     var pend = stJSON('sessionStorage', 'pending', null), after = ((A.quote && A.quote.unconfirmed_after_s) || 20) * 1000;
-    if (!pend || Date.now() - pend.t < after) return;
+    if (!pend || (!now && pend.t >= LOADED && Date.now() - pend.t < after)) return; // vytvořeno před tímto načtením stránky = návrat bez přijetí
     if (Date.now() - pend.t > 864e5) { st('sessionStorage', 'pending', null); return; }
     if (!pend.w) { pend.w = 1; st('sessionStorage', 'pending', JSON.stringify(pend)); track('jarda_quote_unconfirmed', { lead_id: pend.id }); }
-    say([p(T('quote_unconfirmed', { id: pend.id }), 'pmj-note'), actions([btn('Zkontrolovat a odeslat znovu', function () { st('sessionStorage', 'pending', null); showQuote('retry'); }, 'pmj-btn-primary'), waButton('Dotaz k poptávce ' + pend.id, 'unconfirmed')])], 'pmj-bot', 'unconf');
+    var c = contact(), body = mailBody(pend.id, draftSummary(), []);
+    say([p(T('quote_unconfirmed', { id: pend.id }), 'pmj-note'), actions([btn('Zkontrolovat a odeslat znovu', function () { st('sessionStorage', 'pending', null); showQuote('retry'); }, 'pmj-btn-primary'),
+      link('Poslat e-mailem', mailto(c.email, (X.test ? 'TEST – ' : '') + 'Poptávka ' + pend.id + ' (záložní e-mail)', body), '', false, function () { track('jarda_quote_fallback_click', { lead_id: pend.id, channel: 'email' }); }),
+      waButton('Dotaz k poptávce ' + pend.id, 'unconfirmed')]), pend.f ? p('Přílohy (' + pend.f + ') do e-mailu přiložte ručně.', 'pmj-small') : null], 'pmj-bot', 'unconf');
   }
 
   /* ---------- odpovědi ---------- */

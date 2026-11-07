@@ -43,6 +43,9 @@
   } } };
   // jen pro demo: neodesílá se na FormSubmit, rovnou simuluje návrat po odeslání
   window.PMJ_CONFIG_OVERRIDE = { dry_run: true };
+  // ?down=1 → skutečné odeslání na neexistující adresu (simulace výpadku odesílací služby, např. 522)
+  // ?live=1 → skutečné odeslání na FormSubmit (v testech se odpovědi formsubmit.co simulují: výpadek / chyba / úspěch)
+  if (q.get('live')) PMJ_CONFIG_OVERRIDE = { dry_run: false };
   if (q.get('index') === 'broken') PMJ_CONFIG_OVERRIDE.index_url = 'https://dotejdne-cmd.github.io/promontaz-search/neexistuje.json';
   if (q.get('auto') === 'fast') PMJ_CONFIG_OVERRIDE.auto_open = { enabled: true, after_seconds: 3, on_pageview: 2 };
 </script>
@@ -83,8 +86,8 @@
 <script>
   // ?ch=1 → načíst přes kanál dist/stable/jarda.min.js (jako v Zápatí); ?both=1 → kanál i přímý řádek v3 (test dvou instancí)
   (function () {
-    var src = q.get('ch') ? 'dist/stable/jarda.min.js' : 'dist/3.0.3/jarda.min.js';
-    [src].concat(q.get('both') ? ['dist/3.0.3/jarda.min.js'] : []).forEach(function (u) { var s = document.createElement('script'); s.src = u; s.defer = true; document.body.appendChild(s); });
+    var src = q.get('ch') ? 'dist/stable/jarda.min.js' : 'dist/3.0.4/jarda.min.js';
+    [src].concat(q.get('both') ? ['dist/3.0.4/jarda.min.js'] : []).forEach(function (u) { var s = document.createElement('script'); s.src = u; s.defer = true; document.body.appendChild(s); });
   })();
 </script>
 </body>
