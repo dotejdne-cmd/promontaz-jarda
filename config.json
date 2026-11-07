@@ -118,6 +118,6 @@
   "formsubmit_guard": {
     "_readme": "Ochrana formuláře /nacenit-material/: nacenit = kontrola služby před odesláním, při výpadku připravený e-mail. nacenit_direct = odeslání bez anglické stránky reCAPTCHA (_captcha=false) → přímý návrat na české poděkování formuláře, přílohy beze změny. Jarda má obojí vždy.",
     "nacenit": true,
-    "nacenit_direct": false
+    "nacenit_direct": true
   }
 }
