@@ -121,3 +121,21 @@
   html.pmj-lock,html.pmj-lock body{overflow:hidden!important}
 }
 @media print{.pmj-root{display:none!important}}
+/* 3.1: ověřený nákup, vložený seznam, kalkulačky */
+.pmj-root .pmj-buy{grid-column:1/-1;margin-top:8px;padding:10px;border:1px solid var(--pmj-line);border-radius:8px;background:#fff}
+.pmj-root .pmj-buyrow{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin:8px 0}
+.pmj-root .pmj-buyq{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.pmj-root .pmj-buy .pmj-qty{width:90px;min-height:44px;font-size:16px}
+.pmj-root .pmj-un{font-size:12px;color:var(--pmj-m);white-space:nowrap}
+.pmj-root .pmj-imp{max-height:none}
+.pmj-root .pmj-imp-row{display:grid;grid-template-columns:56px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid var(--pmj-line)}
+.pmj-root .pmj-imp-q{font-weight:700;word-break:break-word}
+.pmj-root .pmj-imp-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.pmj-root .pmj-imp-raw{font-weight:600;word-break:break-word}
+.pmj-root .pmj-imp-match{display:flex;align-items:flex-start;gap:6px;font-size:13px;word-break:break-word}
+/* šablona Merkur skrývá nativní checkboxy (display:none) → vynutit */
+.pmj-root input.pmj-cbx{display:inline-block!important;position:static!important;opacity:1!important;visibility:visible!important;flex:0 0 auto;width:20px!important;height:20px!important;margin:1px 0 0!important;-webkit-appearance:checkbox!important;appearance:auto!important;accent-color:var(--pmj-o)}
+.pmj-root .pmj-imp-warn{font-size:12px;color:#8A4B00}
+.pmj-root .pmj-imp-none .pmj-imp-q,.pmj-root .pmj-imp-check .pmj-imp-q{color:#8A4B00}
+.pmj-root .pmj-calcs a{font-weight:600}
+.pmj-root textarea.pmj-input{width:100%;font-size:16px}

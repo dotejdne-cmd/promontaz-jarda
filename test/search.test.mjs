@@ -81,3 +81,11 @@ test('náhled 100×100: orig i podepsaný big/ (bez podpisu)', () => {
   assert.equal(thumbUrl('big/70146_osb.png?ff=1&x=1024&y=768&q=85&ts=6a215edf&sg=161563f2', B), B + '70146_osb.png?6a215edf');
   assert.equal(thumbUrl('', B), '');
 });
+
+test('typ za pomlčkou: CYKY-J ≠ CYKY-O, „cyky“ najde oba', () => {
+  const r = q => search(idx, q, { limit: 10 }).results.map(x => x.n);
+  assert.deepEqual(r('cyky-j 3x2,5'), ['Kabel CYKY-J 3x2,5 (C)']);
+  assert.deepEqual(r('kabel CYKY-J 3x2,5'), ['Kabel CYKY-J 3x2,5 (C)']);
+  assert.deepEqual(r('cyky-o 3x1,5'), ['Kabel CYKY-O 3x1,5 (A)']);
+  assert.deepEqual(r('cyky 3x1,5').sort(), ['Kabel CYKY-J 3x1,5 (C)', 'Kabel CYKY-O 3x1,5 (A)']);
+});

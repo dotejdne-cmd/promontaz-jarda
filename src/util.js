@@ -55,3 +55,32 @@ export function merge(dst, src) {
   }
   return dst;
 }
+
+/* Položka seznamu k nacenění: {n název, c kód, u odkaz, q množství, un jednotka, f volný dotaz}.
+   Čistí i vstup od kalkulaček (window.PMJ.add) – jen texty a odkazy na e-shop. */
+var UN = ['ks', 'bal', 'm', 'm2', 'role', 'pár', 'paleta'];
+export function cleanItem(x, allowed) {
+  if (!x || typeof x !== 'object') return null;
+  var name = String(x.n == null ? '' : x.n).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!name) return null;
+  var q = parseFloat(String(x.q == null ? 1 : x.q).replace(',', '.'));
+  q = isFinite(q) && q > 0 ? Math.min(100000, Math.round(q * 1000) / 1000) : 1;
+  var u = '';
+  if (x.u) {
+    try { var U = new URL(String(x.u), location.href); if (U.origin === location.origin || (allowed || []).some(function (a) { return U.href.indexOf(a) === 0; })) u = U.href; } catch (e) {}
+  }
+  var c = String(x.c == null ? '' : x.c).replace(/[^A-Za-z0-9_.\-/ ]/g, '').trim().slice(0, 60);
+  return { n: name, c: c, u: u, q: q, un: UN.indexOf(x.un) > -1 ? x.un : '', f: x.f ? 1 : 0 };
+}
+export function listMerge(list, items, allowed) {
+  var added = 0;
+  (items || []).slice(0, 100).forEach(function (raw) {
+    var it = cleanItem(raw, allowed);
+    if (!it) return;
+    var found = null;
+    list.forEach(function (x) { if (x.n === it.n && (x.u || '') === (it.u || '') && (x.un || '') === it.un) found = x; });
+    if (found) found.q = Math.round(((+found.q || 1) + it.q) * 1000) / 1000; else list.push(it);
+    added++;
+  });
+  return added;
+}

@@ -118,6 +118,7 @@ import { rootOf, wanted, load } from './channel.js';
     updateBadge();
     document.addEventListener('keydown', function (e) { if ((e.key === 'Escape' || e.key === 'Esc') && !(app && app.isOpen())) hideTeaser(); });
     window.addEventListener('storage', function (e) { if (e.key === 'pmj2_list') updateBadge(); });
+    api();
 
     /* návrat z FormSubmitu → aplikace ověří číslo poptávky a ukáže poděkování */
     if (/[?&]pmj_sent=/.test(Q)) { loadApp().then(function (a) { a.handleReturn(); }, fallback); return; }
@@ -129,6 +130,19 @@ import { rootOf, wanted, load } from './channel.js';
     if (a.enabled && !(onCart && !(C.context && C.context.teaser_on_cart)) && !st('localStorage', 'noauto') && !st('sessionStorage', 'auto') && !st('sessionStorage', 'opened')) {
       setTimeout(showTeaser, pv >= (a.on_pageview || 2) ? 4000 : (a.after_seconds || 20) * 1000);
     }
+  }
+
+  /* Veřejné API pro kalkulačky a další části webu: výsledek do seznamu k nacenění bez opisování.
+     window.PMJ.add({items: [{n: 'Název', c: 'KÓD', u: '/produkt/', q: 12, un: 'ks'}], source: 'kalk-osb', open: true})
+     Před načtením Jardy: (window.pmjQueue = window.pmjQueue || []).push({...}).
+     Volá se na klik zákazníka → teprve pak se stáhne aplikace, která vstup vyčistí (jen text, odkazy jen na e-shop,
+     max 100 položek) a uloží; do měření jde jen počet a zdroj. Vrací Promise s počtem přidaných položek. */
+  function api() {
+    function add(d) { return loadApp().then(function (a) { return a.addFromApi(d || {}); }, fallback); }
+    var q = window.pmjQueue;
+    window.PMJ = { add: add };
+    window.pmjQueue = { push: add };
+    if (q && q.forEach) q.forEach(add);
   }
 
   /* ochrana formuláře /nacenit-material/ při výpadku FormSubmitu – jen na té stránce a jen po zapnutí v config.json */
