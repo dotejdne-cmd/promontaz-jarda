@@ -9,7 +9,10 @@
   "thumb_base": "https://www.promontaz.cz/user/shop/related/",
   "cart_add": {
     "enabled": true,
-    "confirm_timeout_ms": 6000
+    "confirm_timeout_ms": 6000,
+    "verify_timeout_ms": 8000,
+    "b2b_hint_from_czk": 15000,
+    "_readme": "Do košíku jen po ověření na stránce produktu (jednotka, Obsah balení, min/krok/max, cena, kód). b2b_hint_from_czk: od této částky Jarda nabídne nacenění (bez slibu slevy)."
   },
   "quote": {
     "max_files": 10,
@@ -39,7 +42,7 @@
     "partial_note": "Výsledky bez „{w}“ – zkontrolujte, že odpovídají tomu, co potřebujete.",
     "no_results_quote": "Naceníme to i tak. Přidejte dotaz do seznamu, nebo pošlete fotku či seznam.",
     "price_note": "Ceny jsou s DPH podle e-shopu. Sklad a termín potvrdí obchodník.",
-    "cart_added": "Přidáno do košíku.",
+    "cart_added": "Vloženo do košíku:",
     "cart_failed": "Do košíku se to nepodařilo vložit. Otevřete prosím produkt a vložte ho tam.",
     "variant_hint": "Produkt má varianty – vyberte je na stránce produktu.",
     "set_title": "Sada podle popisu obsahuje:",
@@ -60,7 +63,16 @@
     "fallback_title": "Odesílací služba teď neodpovídá. Poptávka NEBYLA odeslána – seznam i údaje zůstávají uložené.",
     "fallback_text": "Pošlete ji prosím e-mailem, připravili jsme ho za vás. Stačí ho odeslat ze svého e-mailu.",
     "fallback_unknown": "Nepodařilo se ověřit, zda poptávka dorazila (odesílací služba neodpověděla). Údaje zůstávají uložené. Pro jistotu ji můžete poslat e-mailem.",
-    "fallback_rejected": "Odesílací služba poptávku nepřijala. Poptávka NEBYLA odeslána – údaje zůstávají uložené."
+    "fallback_rejected": "Odesílací služba poptávku nepřijala. Poptávka NEBYLA odeslána – údaje zůstávají uložené.",
+    "search_qty_hint": "Klidně i s množstvím: „200 ks vrut 5x60“.",
+    "results_qty": "Pro {qty} jsem v katalogu našel:",
+    "verify_failed": "Balení a cenu se teď nepodařilo ověřit. Otevřete prosím produkt, nebo ho přidejte k nacenění.",
+    "verify_mismatch": "Údaje produktu se teď nepodařilo ověřit. Otevřete prosím produkt, cenu a balení uvidíte tam.",
+    "b2b_hint": "Větší odběr? Rádi vám ho naceníme – tlačítko Nacenit.",
+    "calc_hint": "Nevíte, kolik toho potřebujete?",
+    "import_intro": "Vložte seznam (i z Excelu nebo e-mailu). Ke každé položce najdu produkt v katalogu a upozorním, co je potřeba upřesnit.",
+    "import_note": "Zaškrtnuté položky přidám jako konkrétní produkt, ostatní jako text k nacenění. Cenu, balení a dostupnost potvrdí obchodník.",
+    "import_b2b": "Větší seznam vám obchodník nacení i s dopravou na stavbu."
   },
   "intent_rules": {
     "doprava": {
@@ -75,7 +87,13 @@
         "výdejní místo",
         "na výdejní místo",
         "na adresu",
-        "osobní odběr"
+        "osobní odběr",
+        "doprava dřeva",
+        "paletová doprava",
+        "na paletě",
+        "paletou",
+        "těžká zásilka",
+        "doprava na stavbu"
       ],
       "words": [
         "doprava",
@@ -294,5 +312,132 @@
       "porobeton",
       "ytong"
     ]
-  }
+  },
+  "shipping": {
+    "_readme": "Ověřeno na https://www.promontaz.cz/doprava-platba/ a v košíku Shoptetu (cartInfo.freeShippingFrom = 5999) dne 19. 11. 2026. Při změně podmínek upravit zde. Jarda neuvádí dodací lhůty.",
+    "verified": "2026-11-19",
+    "rules": [
+      "Cenu dopravy spočítá košík podle hmotnosti a typu zboží (PPL, DPD): zásilka do 29,9 kg na adresu nebo do PPL výdejního boxu (do 25 kg) za 143,10 Kč, 30–59,9 kg za 220 Kč, od 60 kg za 330 Kč (vše s DPH).",
+      "Dřevo (KVH, OSB, řezivo) vozíme individuálně od 1 000 Kč podle hodnoty zboží. Je-li v košíku dřevo, jede touto dopravou celá objednávka.",
+      "U paletového a nadrozměrného zboží se doprava i termín řeší individuálně."
+    ],
+    "free_from_czk": 5999,
+    "free_note": "Platí pro PPL a DPD na adresu a PPL výdejní box. Neplatí pro individuální dopravu dřeva; u nadrozměrného a paletového zboží se doprava řeší samostatně.",
+    "note": "Termín doručení se liší podle zboží. U dřeva, palet a větších objednávek ho potvrdíme po objednávce."
+  },
+  "import": {
+    "max_lines": 50,
+    "b2b_lines": 8
+  },
+  "calculators": [
+    {
+      "id": "osb",
+      "t": "Kalkulačka OSB desek",
+      "u": "/kalkulacky/kalkulacka-osb/",
+      "k": [
+        " osb"
+      ]
+    },
+    {
+      "id": "vruty",
+      "t": "Kalkulačka počtu vrutů",
+      "u": "/kalkulacky/kalkulacka-poctu-vrutu-a-pruvodce-vyberem/",
+      "k": [
+        " vrut"
+      ]
+    },
+    {
+      "id": "terasa",
+      "t": "Kalkulačka dřevěné terasy",
+      "u": "/kalkulacky/kalkulacka-drevene-terasy/",
+      "k": [
+        " teras",
+        "prkn"
+      ]
+    },
+    {
+      "id": "sdk",
+      "t": "Kalkulačka sádrokartonu",
+      "u": "/kalkulacky/kalkulacka-sadrokartonu/",
+      "k": [
+        "sadrokart",
+        " sdk",
+        "cd profil",
+        "ud profil"
+      ]
+    },
+    {
+      "id": "elektro",
+      "t": "Kalkulačka elektroinstalace",
+      "u": "/kalkulacky/kalkulacka-elektroinstalace-/",
+      "k": [
+        "cyky",
+        "kabel"
+      ]
+    },
+    {
+      "id": "kotveni",
+      "t": "Kalkulačka kotvení do zdiva",
+      "u": "/kalkulacky/kalkulacka-kotveni-do-zdiva/",
+      "k": [
+        "hmozdin"
+      ]
+    },
+    {
+      "id": "chemkotva",
+      "t": "Kalkulačka chemické kotvy",
+      "u": "/kalkulacky/kalkulacka-spotreby-chemicke-kotvy/",
+      "k": [
+        "chemick",
+        "kotva"
+      ]
+    },
+    {
+      "id": "pena",
+      "t": "Kalkulačka montážní pěny",
+      "u": "/kalkulacky/kalkulacka-spotreby-montazni-peny/",
+      "k": [
+        "pena",
+        "pur "
+      ]
+    },
+    {
+      "id": "silikon",
+      "t": "Kalkulačka silikonu a tmelu",
+      "u": "/kalkulacky/kalkulacka-spotreby-silikonu-a-tmelu/",
+      "k": [
+        "silikon",
+        "tmel"
+      ]
+    },
+    {
+      "id": "hydro",
+      "t": "Kalkulačka hydroizolace",
+      "u": "/kalkulacky/kalkulacka-spotreby-hydroizolace/",
+      "k": [
+        "hydroizol",
+        "sterka"
+      ]
+    },
+    {
+      "id": "penetrace",
+      "t": "Kalkulačka penetrace a nátěrů",
+      "u": "/kalkulacky/kalkulacka-penetrace-a-nateru/",
+      "k": [
+        "penetrac",
+        "nater"
+      ]
+    },
+    {
+      "id": "fasada",
+      "t": "Kalkulačka zateplení fasády",
+      "u": "/kalkulacky/kalkulacka-zatepleni-fasady/",
+      "k": [
+        "zatepl",
+        "fasad",
+        "polystyren",
+        "eps "
+      ]
+    }
+  ]
 }

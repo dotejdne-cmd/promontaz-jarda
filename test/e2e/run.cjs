@@ -17,6 +17,20 @@ const server = http.createServer((q, r) => {
 });
 const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
 const results = []; let failed = 0;
+// Stránky produktů pro ověřený nákup: zjednodušený Shoptet (Merkur) – stejné značky, jaké čte src/buy.js
+// (ověřeno proti skutečným stránkám v test/fixtures/*.html.gz jednotkovými testy test/buy.test.mjs).
+const FIX = JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixture-index.json'), 'utf8'));
+const PRODUCT = {}; // slug → přepis {unit, pack, min, step, max, variants, code, status}
+function productHtml(slug) {
+  const it = FIX.items.find(x => x[1] === slug + '/'); if (!it) return null;
+  const o = Object.assign({ code: String(it[5]).split(' ')[0], price: it[3], unit: 'ks', pack: null, min: 1, step: 1, max: 9999, variants: !!it[8] }, PRODUCT[slug] || {});
+  const m = /bal\. (\d+) ks/.exec(it[0]); if (m && !PRODUCT[slug]) { o.unit = 'bal'; o.pack = m[1] + ' ks'; }
+  return `<html><body><div class="p-final-price-wrapper"><strong class="price-final"><span class="price-final-holder">${o.price} Kč<span class="pr-list-unit">/&nbsp;${o.unit}</span></span></strong></div>
+  <span class="p-code"><span class="p-code-label">Kód:</span><span>${o.code}</span></span>
+  <form action="/action/Cart/addCartItem/" method="post" id="product-detail-form"><meta itemprop="sku" content="${o.code}" /><meta itemprop="price" content="${o.price}.00" />
+  ${o.variants ? '<select name="priceId"><option>A</option></select>' : ''}<input type="number" name="amount" value="1" class="amount" data-decimals="0" step="${o.step}" min="${o.min}" max="${o.max}" /></form>
+  ${o.pack ? `<table><tr><th><span class="row-header-label">Obsah balení<span class="row-header-label-colon">:</span></span></th><td> ${o.pack} </td></tr></table>` : ''}</body></html>`;
+}
 const VER = require('../../package.json').version;
 const STABLE = String((require('../../package.json').jarda || {}).stable || '2'), DEF = STABLE === '2' ? 'v2' : STABLE; // výchozí verze kanálu
 async function step(name, fn) {
@@ -29,6 +43,11 @@ async function ctxSetup(ctx, errs) {
   await ctx.route(/^https:\/\/(?!127\.0\.0\.1)/, r => r.abort()); // nic dalšího ze sítě
   await ctx.route(/promontaz-search\/index\.json/, r => r.fulfill({ path: path.join(ROOT, 'test/fixture-index.json'), headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' } }));
   await ctx.route(/neexistuje\.json/, r => r.fulfill({ status: 404, body: 'nf' }));
+  await ctx.route(/^https:\/\/www\.promontaz\.cz\/([a-z]+)\/$/, r => {
+    const slug = /cz\/([a-z]+)\/$/.exec(r.request().url())[1], o = PRODUCT[slug] || {}, html = productHtml(slug);
+    if (!html || o.status) return r.fulfill({ status: o.status || 404, body: 'nf', headers: { 'access-control-allow-origin': '*' } });
+    r.fulfill({ body: html, headers: { 'content-type': 'text/html; charset=utf-8', 'access-control-allow-origin': '*' } });
+  });
   await ctx.addInitScript(() => {
     window.__gtag = [];
     window.gtag = function () { window.__gtag.push(Array.from(arguments)); };
@@ -67,6 +86,12 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.ok(await pg.evaluate(() => document.activeElement.classList.contains('pmj-q')));
     assert.equal(await pg.getAttribute('.pmj-fab', 'aria-expanded'), 'true');
   });
+  await step('katalog: otevření ho nestahuje, začne se stahovat s prvním napsaným znakem', async () => {
+    assert.ok(!reqs.some(u => /index\.json/.test(u)), 'po otevření bez psaní se katalog nestahuje');
+    await pg.type('.pmj-q', 'k'); await pg.waitForTimeout(300);
+    assert.equal(reqs.filter(u => /index\.json/.test(u)).length, 1);
+    await pg.fill('.pmj-q', '');
+  });
   await step('produkt: větší množství přidá produkt s množstvím z pole Množství', async () => {
     await pg.click('.pmj-chip-hot');
     const l = await pg.evaluate(() => JSON.parse(localStorage.pmj2_list));
@@ -79,11 +104,53 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.match(t, /Turbo šroub/); assert.match(t, /Kč\s+s DPH/); assert.match(t, /Kód: 8061BD/);
     assert.ok(await pg.$('.pmj-cards .pmj-card:first-child button:has-text("Do košíku")'));
   });
-  await step('košík: vložení přes Shoptet API a potvrzení až po ShoptetCartUpdated', async () => {
+  await step('košík: nejdřív ověření balení na stránce produktu, vložení přes Shoptet API, potvrzení až po ShoptetCartUpdated', async () => {
     await pg.click('.pmj-cards .pmj-card:first-child button:has-text("Do košíku")');
+    await pg.waitForSelector('.pmj-buy .pmj-qty', { timeout: 4000 });
+    const t = await pg.$eval('.pmj-buy', e => e.innerText);
+    assert.match(t, /Prodává se po bal\. \(100 ks\)/); assert.match(t, /= 319 Kč s DPH/);
+    assert.equal(await pg.evaluate(() => window.__demoCart), undefined, 'bez potvrzení se nic nevkládá');
+    await pg.click('.pmj-buy button:has-text("Vložit do košíku")');
     await pg.waitForSelector('button:has-text("✓ V košíku")', { timeout: 3000 });
     assert.deepEqual(await pg.evaluate(() => window.__demoCart), [{ productCode: '8061BD', amount: 1 }]);
-    assert.match(await lastBot(pg), /Přidáno do košíku/);
+    assert.match(await lastBot(pg), /Vloženo do košíku: 1 bal\. – Den Braven Turbo šroub/);
+    const ev = await pg.evaluate(() => dataLayer.filter(o => o.event === 'jarda_add_to_cart').pop());
+    assert.deepEqual([ev.result, ev.quantity, ev.item_id], ['ok', 1, '8061BD']);
+  });
+  await step('množství v dotazu: „250 ks turbo šroub 7,5x92“ najde produkt a navrhne 3 balení po 100 ks', async () => {
+    await pg.evaluate(() => { window.__demoCart = []; });
+    await ask(pg, '250 ks turbo šroub 7,5x92'); await pg.waitForSelector('.pmj-bot:last-child .pmj-card');
+    assert.match(await lastBot(pg), /Pro 250 ks jsem v katalogu našel/);
+    await pg.click('.pmj-bot:last-child .pmj-card:first-child button:has-text("Do košíku")');
+    await pg.waitForSelector('.pmj-bot:last-child .pmj-buy .pmj-qty');
+    assert.equal(await pg.$eval('.pmj-bot:last-child .pmj-buy .pmj-qty', e => e.value), '3');
+    assert.match(await pg.$eval('.pmj-bot:last-child .pmj-buy', e => e.innerText), /Na 250 ks stačí 3 bal\. \(300 ks\)/);
+    await pg.click('.pmj-bot:last-child .pmj-buy button:has-text("Vložit do košíku")');
+    await pg.waitForFunction(() => /Vloženo do košíku: 3 bal\./.test([...document.querySelectorAll('.pmj-bot')].pop().innerText));
+    assert.deepEqual(await pg.evaluate(() => window.__demoCart), [{ productCode: '8061BD', amount: 3 }]);
+  });
+  await step('ověřený nákup: neplatné množství se nevloží; chybná stránka / jiný kód / varianty → jen odkaz, nic do košíku', async () => {
+    await pg.evaluate(() => { window.__demoCart = []; });
+    PRODUCT.ai = { min: 5, step: 5 }; // hmoždinka 10x35 nylon: min 5, po 5
+    await ask(pg, 'hmoždinka turbo 10x35 nylon'); await pg.waitForSelector('.pmj-bot:last-child .pmj-card');
+    await pg.click('.pmj-bot:last-child .pmj-card:first-child button:has-text("Do košíku")');
+    await pg.waitForSelector('.pmj-bot:last-child .pmj-buy .pmj-qty');
+    assert.equal(await pg.$eval('.pmj-bot:last-child .pmj-buy .pmj-qty', e => e.value), '5');
+    await pg.fill('.pmj-bot:last-child .pmj-buy .pmj-qty', '7');
+    await pg.click('.pmj-bot:last-child .pmj-buy button:has-text("Vložit do košíku")');
+    assert.match(await pg.$eval('.pmj-bot:last-child .pmj-buy', e => e.innerText), /od 5 do 9999 ks po 5/);
+    assert.deepEqual(await pg.evaluate(() => window.__demoCart), []);
+    // (výsledek ověření se pamatuje podle adresy → každý případ na jiném produktu)
+    for (const [slug, q, o, re] of [['aj', 'hmoždinka turbo 10x35 Al', { status: 500 }, /nepodařilo ověřit/], ['ak', 'Turbo Speed MAMUTÍ', { code: 'JINY_KOD' }, /nepodařilo ověřit/], ['al', 'Turbo Speed COMBO', { variants: true }, /varianty/]]) {
+      PRODUCT[slug] = o;
+      await ask(pg, q); await pg.waitForSelector('.pmj-bot:last-child .pmj-card');
+      await pg.click('.pmj-bot:last-child .pmj-card:first-child button:has-text("Do košíku")');
+      await pg.waitForFunction(() => { const b = [...document.querySelectorAll('.pmj-buy')].pop(); return b && !/Ověřuji/.test(b.innerText); });
+      const t = await pg.$eval('.pmj-bot:last-child .pmj-buy', e => e.innerText);
+      assert.match(t, re, JSON.stringify(o)); assert.ok(!/Vložit do košíku/.test(t));
+    }
+    assert.deepEqual(await pg.evaluate(() => window.__demoCart), []);
+    for (const k of ['ai', 'aj', 'ak', 'al']) delete PRODUCT[k];
   });
   await step('kliknutí na produkt se měří (pozice, kód, dotaz)', async () => {
     await pg.$eval('.pmj-cards .pmj-card:first-child .pmj-card-name', a => { a.addEventListener('click', e => e.preventDefault(), { once: true }); a.click(); });
@@ -401,13 +468,80 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     await pg.goto(B + '?page=category&pmj_ver=reset');
   });
 
+  const c3 = await br.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true }); await ctxSetup(c3, errs);
+  const p3 = await c3.newPage();
+  await step('vložený seznam: řádky → produkty z katalogu, upozornění na chybějící počet a nejasné položky, přidání k nacenění', async () => {
+    await p3.goto(B + '?page=category'); await openJarda(p3);
+    await p3.click('.pmj-chip:has-text("Vložit seznam materiálu")');
+    await p3.fill('.pmj-bot:last-child textarea', '1. 250 ks turbo šroub 7,5x92\n- kabel CYKY-J 3x2,5 50 m\nkabel\nkramle tesařská 10x200\nzlatý hřebík 3x50 20 ks');
+    await p3.click('button:has-text("Najít v katalogu")');
+    await p3.waitForSelector('.pmj-imp');
+    const rows = await p3.$$eval('.pmj-imp-row', a => a.map(r => [r.className.replace('pmj-imp-row pmj-imp-', ''), r.querySelector('.pmj-imp-q').textContent, (r.querySelector('.pmj-cbx') || {}).checked === true]));
+    assert.deepEqual(rows, [['ok', '250 ks', true], ['ok', '50 m', true], ['check', '?', false], ['none', '?', false], ['none', '20 ks', false]]);
+    assert.match(await lastBot(p3), /chybí počet/); assert.match(await lastBot(p3), /upřesněte rozměr nebo typ/);
+    assert.match(await p3.$eval('.pmj-imp-check a', a => a.getAttribute('href')), /^\/vyhledavani\/\?string=kabel$/);
+    const ev = await p3.evaluate(() => dataLayer.filter(o => o.event === 'jarda_list_import').pop());
+    assert.deepEqual([ev.lines, ev.matched, ev.ambiguous, ev.unmatched, ev.missing_qty], [5, 2, 1, 2, 2]);
+    await p3.click('button:has-text("Přidat vše k nacenění (5)")');
+    const l = await p3.evaluate(() => JSON.parse(localStorage.pmj2_list));
+    assert.deepEqual(l.map(x => [x.q, x.un, x.c, x.f]), [[250, 'ks', '8061BD', 0], [50, 'm', 'EL_KAB_17022', 0], [1, '', '', 1], [1, '', '', 1], [1, '', '', 1]]);
+    assert.match(await p3.$eval('.pmj-form textarea', e => e.value), /^250 ks Den Braven Turbo šroub.*\n50 m Kabel CYKY-J 3x2,5 \(C\)[^\n]*\n1× Dotaz: kabel/);
+  });
+  await step('seznam: export do CSV pro Excel (UTF-8, středníky) a vložení víceřádkového textu do pole', async () => {
+    await p3.click('.pmj-listbtn');
+    const [dl] = await Promise.all([p3.waitForEvent('download'), p3.click('.pmj-list button:has-text("Stáhnout pro Excel (CSV)")')]);
+    assert.equal(dl.suggestedFilename(), 'promontaz-seznam-materialu.csv');
+    const csv = fs.readFileSync(await dl.path(), 'utf8');
+    assert.ok(csv.startsWith('﻿Množství;Jednotka;Název;Kód;Odkaz\r\n250;ks;Den Braven Turbo šroub'), csv.slice(0, 120));
+    await p3.focus('.pmj-q');
+    await p3.evaluate(() => { const dt = new DataTransfer(); dt.setData('text/plain', 'OSB 18\t12\nkramle 10x200 5 ks'); document.querySelector('.pmj-q').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
+    await p3.waitForSelector('.pmj-bot:last-child .pmj-imp');
+    assert.deepEqual(await p3.$$eval('.pmj-bot:last-child .pmj-imp-q', a => a.map(x => x.textContent)), ['12×', '5 ks']);
+    assert.equal(await p3.$eval('.pmj-q', e => e.value), '');
+  });
+  await step('kalkulačky: window.PMJ.add (i fronta před načtením) přidá výsledek, cizí odkazy zahodí, otevře seznam', async () => {
+    await p3.evaluate(() => localStorage.removeItem('pmj2_list'));
+    await p3.goto(B + '?page=category'); await p3.waitForSelector('.pmj-fab');
+    const n = await p3.evaluate(() => window.PMJ.add({ source: 'kalk-osb', items: [
+      { n: 'OSB 2500/1250/18 RH', c: 'J_00076', u: 'https://www.promontaz.cz/v/', q: 14, un: 'ks' },
+      { n: '<img src=x onerror=alert(1)>', u: 'https://evil.example/x', q: -5, un: 'kg' }, { n: '' }] }));
+    assert.equal(n, 2);
+    await p3.waitForSelector('.pmj-list .pmj-row');
+    const l = await p3.evaluate(() => JSON.parse(localStorage.pmj2_list));
+    assert.deepEqual(l, [{ n: 'OSB 2500/1250/18 RH', c: 'J_00076', u: 'https://www.promontaz.cz/v/', q: 14, un: 'ks', f: 0 }, { n: '<img src=x onerror=alert(1)>', c: '', u: '', q: 1, un: '', f: 0 }]);
+    assert.equal(await p3.$$eval('.pmj-list img', a => a.length), 0, 'název se vkládá jako text');
+    assert.equal(await p3.textContent('.pmj-badge'), '2');
+    const ev = await p3.evaluate(() => dataLayer.filter(o => o.event === 'jarda_api_add').pop());
+    assert.deepEqual([ev.api_source, ev.items_added], ['kalk-osb', 2]);
+    // fronta: kalkulačka zavolá dřív, než se Jarda načte
+    await p3.addInitScript(() => { window.pmjQueue = [{ source: 'kalk-vruty', open: false, items: [{ n: 'Vrut 5x60', q: 3, un: 'bal' }] }]; });
+    await p3.goto(B + '?page=category'); await p3.waitForFunction(() => (JSON.parse(localStorage.pmj2_list || '[]')).length === 3);
+  });
+  await step('doprava: ověřené podmínky (143,10 Kč, zdarma od 5 999 Kč s výjimkami, dřevo, palety), žádné termíny', async () => {
+    await p3.goto(B + '?page=category'); await openJarda(p3);
+    await p3.click('.pmj-chip:has-text("Doprava a platba")'); await p3.waitForTimeout(150);
+    const t = await lastBot(p3);
+    for (const re of [/Minimální objednávka je 450 Kč/, /143,10 Kč/, /Doprava zdarma od 5\s999 Kč/, /Neplatí pro individuální dopravu dřeva/, /Dřevo \(KVH, OSB, řezivo\)/, /paletového a nadrozměrného/, /Kabely posíláme jen na adresu/]) assert.match(t, re);
+    assert.ok(!/48|do \d+ (hodin|dnů)|skladem|společn/i.test(t), t);
+    await ask(p3, 'kolik stojí doprava dřeva na stavbu'); assert.match(await lastBot(p3), /Doprava a platba/);
+  });
+  await step('kalkulačky: čip Spočítat spotřebu vypíše kalkulačky, hledání OSB nabídne kalkulačku OSB', async () => {
+    await p3.click('.pmj-bot .pmj-chip:has-text("Spočítat spotřebu")'); await p3.waitForTimeout(150);
+    assert.equal(await p3.$$eval('.pmj-bot:last-child .pmj-calcs a', a => a.length), 12);
+    await ask(p3, 'osb 18'); await p3.waitForSelector('.pmj-bot:last-child .pmj-card');
+    assert.equal(await p3.$eval('.pmj-bot:last-child a[href="/kalkulacky/kalkulacka-osb/"]', a => a.textContent), 'Kalkulačka OSB desek');
+  });
+  await c3.close();
+
   const m = await br.newContext({ ...devices['iPhone 13'] }); await ctxSetup(m, errs);
   const mp = await m.newPage();
   await step('mobil (iPhone 13, emulace v Chromiu): panel přes celou obrazovku, bez vodorovného posunu', async () => {
     await mp.goto(B + '?page=product'); await mp.waitForSelector('.pmj-fab'); await mp.tap('.pmj-fab'); await mp.waitForSelector('.pmj-chip');
     await mp.fill('.pmj-q', 'cyky 3x2,5'); await mp.press('.pmj-q', 'Enter');
     await mp.waitForSelector('.pmj-card', { timeout: 8000 }).catch(async e => { throw new Error(e.message.split('\n')[0] + ' | ' + await lastBot(mp)); });
+    await mp.tap('.pmj-card:first-child button:has-text("Do košíku")'); await mp.waitForSelector('.pmj-buy .pmj-qty');
     const [sw, iw, pw] = await mp.evaluate(() => [document.documentElement.scrollWidth, innerWidth, document.querySelector('.pmj-panel').getBoundingClientRect().width]);
+    assert.ok(await mp.evaluate(() => { const b = document.querySelector('.pmj-buy').getBoundingClientRect(); return b.right <= innerWidth && b.left >= 0; }), 'nákupní řádek se vejde na šířku');
     assert.equal(sw, iw); assert.equal(pw, iw);
     const fs16 = await mp.$eval('.pmj-q', e => parseFloat(getComputedStyle(e).fontSize));
     assert.ok(fs16 >= 16, 'pole musí mít ≥16 px kvůli zoomu v iOS');

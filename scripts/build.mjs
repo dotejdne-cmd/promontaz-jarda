@@ -25,6 +25,11 @@ const cfg = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const app = JSON.parse(fs.readFileSync('config.app.json', 'utf8'));
 for (const k of ['whatsapp', 'index_url', 'formsubmit_endpoint', 'links', 'facts', 'texts', 'intents']) if (!(k in cfg)) fail(`config.json: chybí ${k}`);
 for (const k of ['intent_rules', 'texts_v3', 'quote', 'contact']) if (!(k in app)) fail(`config.app.json: chybí ${k}`);
+if (app.shipping) {
+  if (app.shipping.free_from_czk != null && !app.shipping.free_note) fail('config.app.json: doprava zdarma bez podmínek (shipping.free_note)');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(app.shipping.verified || '')) fail('config.app.json: shipping.verified (datum ověření na webu)');
+}
+for (const c of app.calculators || []) if (!/^\/kalkulacky\/[a-z0-9-]+\/$/.test(c.u) || !c.t) fail(`config.app.json: kalkulačka ${c.u}`);
 if (!Array.isArray(cfg.intents.doprava)) fail('config.json: intents musí zůstat ve tvaru pro v2 (pole slov)');
 if (cfg.facts.free_shipping_from_czk != null && !process.env.ALLOW_FREE_SHIPPING) console.warn('! doprava zdarma je zapnutá – musí ji potvrdit majitel');
 
@@ -51,7 +56,7 @@ if (STABLE === '2') {
 console.log(`dist/stable/jarda.min.js → ${STABLE === '2' ? 'v2 (dist/jarda.min.js)' : STABLE}`);
 
 // 4) rozpočty (raw i gzip) – zavaděč se stahuje s každou stránkou, aplikace až při interakci
-const BUDGET = { [`${OUT}/jarda.min.js`]: [10 * 1024, 4 * 1024], [`${OUT}/jarda-app.min.js`]: [52 * 1024, 18 * 1024] /* jen při interakci; 3.0.4 +záloha při výpadku FormSubmitu */, 'dist/stable/jarda.min.js': [10 * 1024, 4 * 1024], [`${OUT}/guard.min.js`]: [8 * 1024, 3 * 1024] /* jen na /nacenit-material/ */ };
+const BUDGET = { [`${OUT}/jarda.min.js`]: [10 * 1024, 4.1 * 1024] /* 3.1: +window.PMJ pro kalkulačky (~70 B gzip) */, [`${OUT}/jarda-app.min.js`]: [72 * 1024, 25 * 1024] /* jen při interakci; 3.0.4 +záloha FormSubmitu; 3.1 +ověřený nákup, vložený seznam, export */, 'dist/stable/jarda.min.js': [10 * 1024, 4 * 1024], [`${OUT}/guard.min.js`]: [8 * 1024, 3 * 1024] /* jen na /nacenit-material/ */ };
 for (const [f, [raw, gz]] of Object.entries(BUDGET)) {
   const b = fs.readFileSync(f), g = zlib.gzipSync(b, { level: 9 }).length;
   console.log(`${f}: ${(b.length / 1024).toFixed(1)} kB, gzip ${(g / 1024).toFixed(2)} kB`);

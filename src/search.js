@@ -24,7 +24,9 @@ export function norm(s) {
 }
 
 export function tokens(s) {
-  return norm(s).split(/[^a-z0-9.x]+/).map(function (t) { return t.replace(/^\.+|\.+$/g, ''); })
+  // „CYKY-J“ / „H07V-K“: písmeno za pomlčkou je typ (J ≠ O). Token „cyky“ zůstane (dotaz „cyky“ najde obě),
+  // navíc „cykyj“ – dotaz „cyky-j“ pak najde jen J a „cyky-o“ jen O (dřív J nenašel nic a O vracel i J).
+  return norm(s).replace(/([a-z0-9]*[a-z])-([a-z])(?![a-z0-9])/g, '$1 $1$2').split(/[^a-z0-9.x]+/).map(function (t) { return t.replace(/^\.+|\.+$/g, ''); })
     .filter(function (t) { return t && !STOP[t] && !UNITS[t]; });
 }
 
