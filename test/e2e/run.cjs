@@ -260,8 +260,9 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     await formsubmit(pg, 'hang');
     await quoteForm(pg, B + '?page=product&live=1');
     const t0 = Date.now(); await pg.click('.pmj-send');
-    await pg.waitForSelector('.pmj-bot:has-text("NEBYLA odeslána")', { timeout: 12000 });
-    assert.ok(Date.now() - t0 < 9000, 'kontrola služby má skončit do ~6 s');
+    await pg.waitForSelector('.pmj-bot:has-text("NEBYLA odeslána")', { timeout: 20000 });
+    const lim = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.app.json'), 'utf8')).quote.probe_timeout_ms; // 12 s od 3.1.1 (FormSubmit odpovídá i za 5–6 s)
+    assert.ok(Date.now() - t0 < lim + 3000, `kontrola služby má skončit do ~${lim / 1000} s`);
     assert.match(pg.url(), /demo\.html/);
     const href = await pg.$eval('a:has-text("Otevřít připravený e-mail")', a => a.href);
     assert.match(decodeURIComponent(href), /^mailto:info@promontaz\.cz\?subject=Poptávka PM-\d{6}-J\w{6} \(záložní e-mail\)&body=/);

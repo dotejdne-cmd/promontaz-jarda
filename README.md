@@ -2,7 +2,11 @@
 
 Lehký průvodce nákupem bez AI a bez placených služeb. Najde materiál v katalogu (fotka, cena s DPH, kód, odkaz), vloží jednoduché produkty do košíku přes Shoptet, sestaví seznam k nacenění a odešle B2B poptávku i s přílohami. Na dotazy k dopravě, platbě, objednávkám a fakturám odpovídá jen texty z configu a odkazy. Nic si nevymýšlí: žádná skladovost, termíny, slevy ani technická doporučení.
 
-**Stav (19. 11. 2026):** zákazníci mají **3.0.7** (kanál `stable`). **3.1.0** je testovací verze, zapnete ji jen ve svém prohlížeči přes `?pmj_ver=3.1.0` (viz [Novinky 3.1](#novinky-31)).
+**Stav (19. 11. 2026):** zákazníci mají **3.1.1** (kanál `stable`, schváleno majitelem). Rollback: `"stable": "3.0.7"` + `npm run build` + commit do `main`. Viz [Novinky 3.1](#novinky-31).
+
+**3.1.1** (oprava proti 3.1.0, chyba byla i v 3.0.7):
+- Poptávka s přílohami spouštěla automatické sledování formulářů v GA4 (`form_start` a `form_submit`, zjištěno živě s funkčním gtag.js). Gtag přepisuje `HTMLFormElement.prototype.submit`, proto se skrytý formulář teď odesílá nativní funkcí z prázdného iframe. Ověřeno skutečnou poptávkou: přijata, 0× `form_*`.
+- `quote.probe_timeout_ms` zvednut 6 → 12 s. FormSubmit odpovídal za 5–6 s a Jarda pak zbytečně hlásil „neodpovídá“ (jen config, platí pro všechny verze).
 
 | | v2 (dřív v produkci) | v3 |
 |---|---|---|
@@ -187,7 +191,10 @@ npm run perf
 
 - `npm test`: hledání, záměry, množství a seznam, nákupní údaje ze **skutečných stránek produktů** (`test/fixtures/*.html.gz`). 34 testů.
 - `npm run test:e2e`: 47 scénářů v Chromiu nad `demo.html` (desktop a mobil, přístupnost axe-core, bez sítě).
-- `node test/live/local.cjs` (`MOBILE=1` pro iPhone): **nenasazená** verze z tohoto repa na živém promontaz.cz. Podstrčí se jen v testovacím prohlížeči. Obsahuje ověřený nákup do skutečného košíku Shoptetu (bez objednávky), vložený seznam a dopravu. 8 kontrol.
+- `PAGES=1 node test/live/ga4-commands.cjs` (`PAGES=stable` po přepnutí): GA4 na úrovni příkazů gtag na živém webu. Každá akce dává právě 1 událost, vždy `send_to: GA4`, bez osobních údajů a bez duplicity po obnovení. 8 kontrol.
+- `REAL=1 node test/live/quote-real.cjs` (`LOCAL=1` = nenasazená verze, `ONLY=files`): **skutečná** testová poptávka na info@ (předmět „TEST –“, fiktivní telefon), bez přílohy i s přílohami. Kontroluje přijetí, prázdný seznam a 0× `form_*` v GA4. Spouštět jen vědomě.
+- `test/live/channel.cjs` a `consent.cjs` jsou z doby přechodu v2 → kanál. `consent.cjs` potřebuje přístup na googletagmanager.com a google-analytics.com.
+- `node test/live/local.cjs` (`MOBILE=1` pro iPhone, `PAGES=1` = soubory z Pages): **nenasazená** verze z tohoto repa na živém promontaz.cz. Podstrčí se jen v testovacím prohlížeči. Obsahuje ověřený nákup do skutečného košíku Shoptetu (bez objednávky), vložený seznam a dopravu. 8 kontrol.
 - `node test/live/live.cjs`: 11 kontrol na živém promontaz.cz. Web se nemění, poptávka se neodešle.
 - `node test/live/channel.cjs`: kanál se skutečnými soubory z Pages. Nové Zápatí se simuluje jen v testovacím prohlížeči.
 - `node test/live/consent.cjs`: GA4 před a po souhlasu s cookies (gcs, měřicí ID, nic do Ads, žádné `form_*`, žádné osobní údaje).

@@ -16,8 +16,10 @@ const cart = pg => pg.evaluate(() => { const s = (window.dataLayer || []).find(x
   const br = await chromium.launch();
   const ctx = await br.newContext(process.env.MOBILE ? { ...devices['iPhone 13'] } : { viewport: { width: 1366, height: 860 } });
   const errs = [];
-  await ctx.addInitScript(() => { window.PMJ_CONFIG_OVERRIDE = { dry_run: true }; try { localStorage.removeItem('pmj_ver'); } catch (e) {} });
-  await ctx.route(/dotejdne-cmd\.github\.io\/promontaz-jarda\/(.*?)(\?.*)?$/, r => {
+  // PAGES=1: skutečné soubory z GitHub Pages (testovací režim ?pmj_ver=<verze>, jen v tomto prohlížeči); PAGES=stable: výchozí verze kanálu
+  const PAGES = process.env.PAGES;
+  await ctx.addInitScript(v => { window.PMJ_CONFIG_OVERRIDE = { dry_run: true }; try { if (v) localStorage.setItem('pmj_ver', v); else localStorage.removeItem('pmj_ver'); } catch (e) {} }, PAGES === '1' ? V : '');
+  if (!PAGES) await ctx.route(/dotejdne-cmd\.github\.io\/promontaz-jarda\/(.*?)(\?.*)?$/, r => {
     let f = /promontaz-jarda\/([^?]*)/.exec(r.request().url())[1];
     if (f === 'dist/stable/jarda.min.js') f = `dist/${V}/jarda.min.js`; // Zápatí → testovaná verze
     const p = path.join(REPO, f);

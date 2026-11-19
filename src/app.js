@@ -498,6 +498,21 @@ window.__pmjApp = function (X) {
   function nextUrl(id) { var u = new URL(location.href); u.searchParams.set('pmj_sent', id); u.hash = ''; return u.href; }
 
   var files = [], submitting = false, formSend = null, forceSend = false;
+  /* Odeslání skrytého formuláře mimo dosah automatického sledování formulářů gtag (form_start/form_submit do GA4 a Ads):
+     gtag přepisuje HTMLFormElement.prototype.submit na stránce. Formulář zůstává na stránce (FormSubmit vyžaduje
+     odeslání ze skutečné adresy webu), jen se odešle nepřepsanou nativní funkcí z prázdného iframe. Ověřeno živě 19. 11. 2026. */
+  var nativeSubmit = null;
+  function submitIsolated(F) {
+    document.body.appendChild(F);
+    try {
+      if (!nativeSubmit) {
+        var fr = h('iframe', { src: 'about:blank', title: '', 'aria-hidden': 'true', tabindex: '-1', style: 'position:absolute;width:0;height:0;border:0;visibility:hidden' });
+        document.body.appendChild(fr);
+        nativeSubmit = fr.contentWindow.HTMLFormElement.prototype.submit;
+      }
+      nativeSubmit.call(F);
+    } catch (e) { HTMLFormElement.prototype.submit.call(F); }
+  }
   function field(label, control, hint, opt) {
     return h('label', { class: 'pmj-field' }, [h('span', { class: 'pmj-label' }, [label, opt ? h('span', { class: 'pmj-opt', text: ' (nepovinné)' }) : null]), control, hint ? h('span', { class: 'pmj-hint', text: hint }) : null]);
   }
@@ -634,9 +649,8 @@ window.__pmjApp = function (X) {
           hid('_captcha', 'false');
           noLinks(F); // bez odkazů v polích, jinak FormSubmit nepřesměruje zpět (viz fallback.js)
           setTimeout(function () { unlock(false); }, 15000); // stránka se neopustila (síť) → znovu povolit
-          document.body.appendChild(F);
           F.__pmjOk = 1; // ochrana formulářů (guard) už nekontroluje znovu
-          HTMLFormElement.prototype.submit.call(F);
+          submitIsolated(F);
           return;
         }
         // Bez příloh: AJAX (okamžitá odpověď služby, zákazník zůstává na stránce)

@@ -66,3 +66,18 @@ Jediné rozumné využití do budoucna: převod volně psané poptávky nebo fot
   - nejvýše 100 položek.
 - **Export CSV:** jen položky seznamu, bez kontaktu.
 - **Měření:** jen počty, kódy a zdroj. `search_term` se dál čistí od e-mailů a telefonů.
+
+## 6. Vydání 3.1.1 (19. 11. 2026)
+
+| Kontrola | Výsledek |
+|---|---|
+| Pages: dist/3.1.0, config, kanál = repo | ✅ shodné soubory |
+| Testovací režim `pmj_ver` na promontaz.cz (desktop, iPhone 13, Pixel 7 emulace) | ✅ 8/8, 8/8, live 11/11 |
+| Skutečný košík Shoptetu: 1 bal. vrutů po 1000 ks, 25 m kabelu | ✅ |
+| Skutečné poptávky (TEST, info@): bez přílohy (AJAX) a s PDF + PNG | ✅ přijaty: PM-261119-JPA9040, PM-261119-J4QVZZE (3.1.0), PM-261119-J9KB8V5 (3.1.1) |
+| GA4 příkazy gtag: 11 typů událostí, 1 akce = 1 událost, jen GA4, bez osobních údajů, bez duplicity po obnovení | ✅ |
+| GA4 síť: poptávka s přílohou posílala `form_start`/`form_submit` | ❌ v 3.0.7 i 3.1.0 → opraveno v 3.1.1 (0×) |
+| Kontrola dostupnosti FormSubmitu (6 s), služba odpovídala za 5–6 s | ❌ falešné „neodpovídá“ → 12 s |
+| Doprava: Shoptet v pokladně PPL / DPD / box 143,10 Kč s DPH | ✅ Jarda správně. **Web /doprava-platba/ chybně uvádí „120 Kč bez DPH“**: správně 118,26 Kč (143,10 / 1,21). Ostatní řádky sedí. |
+| Pokladna nabízí „Individuální doprava dřeva 1 000 Kč“ i u košíku bez dřeva (jen vruty) | ⚠️ nastavení Shoptetu, mimo Jardu |
+| iPhone Safari (WebKit) a skutečný Android | ⚠️ neotestováno: v prostředí je jen Chromium (emulace iPhone 13 / Pixel 7) |

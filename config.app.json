@@ -33,7 +33,7 @@
       "1m": "Do měsíce"
     },
     "unconfirmed_after_s": 20,
-    "probe_timeout_ms": 6000,
+    "probe_timeout_ms": 12000,
     "send_timeout_ms": 90000
   },
   "texts_v3": {

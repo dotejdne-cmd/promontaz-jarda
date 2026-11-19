@@ -63,7 +63,13 @@ async function ask(pg, t) { await pg.fill('.pmj-q', t); await pg.press('.pmj-q',
   await step('Do košíku: skutečné shoptet.cartShared.addToCart a potvrzení ze Shoptetu', async () => {
     const b = await pg.$('.pmj-bot:last-of-type .pmj-card button:has-text("Do košíku")');
     assert.ok(b, 'tlačítko Do košíku chybí');
-    await b.click(); await pg.waitForSelector('button:has-text("✓ V košíku")', { timeout: 10000 });
+    await b.click();
+    if (V.localeCompare('3.1.0', undefined, { numeric: true }) >= 0) { // 3.1+: nejdřív ověření balení na stránce produktu
+      await pg.waitForSelector('.pmj-buy .pmj-qty', { timeout: 20000 });
+      results.push('    ' + (await pg.$eval('.pmj-buy', e => e.innerText)).replace(/\n+/g, ' | '));
+      await pg.click('.pmj-buy button:has-text("Vložit do košíku")');
+      await pg.waitForFunction(() => /Vloženo do košíku/.test([...document.querySelectorAll('.pmj-bot')].pop().innerText), null, { timeout: 15000 });
+    } else await pg.waitForSelector('button:has-text("✓ V košíku")', { timeout: 10000 });
     await pg.goto('https://www.promontaz.cz/kosik/');
     const items = await pg.evaluate(() => dataLayer.find(o => o.shoptet).shoptet.cartInfo.cartItems.map(i => i.code));
     assert.ok(items.length >= 1, JSON.stringify(items));
@@ -85,7 +91,7 @@ async function ask(pg, t) { await pg.fill('.pmj-q', t); await pg.press('.pmj-q',
     assert.ok(n.length >= 2);
   });
   await step('dotazy: doprava, objednávka, produkt s jedním „rizikovým“ slovem', async () => {
-    await ask(pg, 'kolik stojí doprava'); await pg.waitForTimeout(300); assert.match(await lastBot(pg), /133,10/);
+    await ask(pg, 'kolik stojí doprava'); await pg.waitForTimeout(300); assert.match(await lastBot(pg), /143,10/);
     await ask(pg, 'kde je moje objednávka'); await pg.waitForTimeout(300); assert.match(await lastBot(pg), /zákaznickém účtu/);
     await ask(pg, 'telefonní kabel'); await pg.waitForTimeout(1500);
     const two = await pg.$$eval('.pmj-bot', b => b.slice(-2).map(x => x.innerText).join('|'));
