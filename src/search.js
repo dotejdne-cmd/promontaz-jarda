@@ -39,6 +39,7 @@ function mkItem(data) {
     var codes = String(it[5] || '').split(' ').filter(Boolean);
     return {
       n: it[0], u: base + it[1], i: it[2] || '', p: typeof it[3] === 'number' ? it[3] : null, v: !!it[8],
+      un: it[8] ? '' : String(it[10] || ''), pk: it[8] ? '' : String(it[11] || ''), // 3.2: prodejní jednotka a obsah balení z nočního indexu (pozice 10, 11)
       c: codes[0] || '', cat: cat,
       ck: codes.map(codeKey),
       nt: tokens(it[0]),
@@ -176,6 +177,16 @@ export function search(idx, query, opts) {
     if (best) res.partial = { without: best.without, query: best.q.join(' '), total: best.o.length, results: best.o.slice(0, limit).map(function (r) { return r.it; }) };
   }
   return res;
+}
+
+/* „/ bal (1000 ks)“ – stejné pravidlo jako promontaz-search 3.2 (unitLabel): jen když index jednotku zná,
+   obsah balení jen v jiné jednotce než prodej („/ m (100 m)“ by mátlo). Údaj z nočního indexu – před vložením
+   do košíku Jarda dál ověřuje stránku produktu. */
+export function unitLabel(unit, pack) {
+  unit = String(unit || '').trim();
+  if (!/^[a-z0-9²³]{1,8}$/i.test(unit)) return '';
+  var u = unit === 'm2' ? 'm²' : unit, pm = /^\s*[\d.,]+\s*(\S.*)$/.exec(pack || ''), pu = pm ? pm[1].trim().toLowerCase() : '';
+  return '/ ' + u + (pm && pu !== unit.toLowerCase() && pu !== u.toLowerCase() ? ' (' + String(pack).trim() + ')' : '');
 }
 
 /* Náhled 100×100 ze Shoptetu. Index má „orig/x.png?ts“ nebo „big/x.png?ff=1&x=1024…&ts=…&sg=…“ (podepsaná velikost);
