@@ -2,7 +2,7 @@
 
 Lehký průvodce nákupem bez AI a bez placených služeb. Najde materiál v katalogu (fotka, cena s DPH, kód, odkaz), vloží jednoduché produkty do košíku přes Shoptet, sestaví seznam k nacenění a odešle B2B poptávku i s přílohami. Na dotazy k dopravě, platbě, objednávkám a fakturám odpovídá jen texty z configu a odkazy. Nic si nevymýšlí: žádná skladovost, termíny, slevy ani technická doporučení.
 
-**Stav (20. 11. 2026):** vyvíjená verze **3.2.0** (navigace bez slepých uliček), viz [Novinky 3.2](#novinky-32). Kanál `stable` a rollback viz `package.json → jarda.stable`; předchozí produkční verze 3.1.1 (rollback: `"stable": "3.1.1"` + `npm run build` + commit do `main`).
+**Stav (20. 11. 2026):** zákazníci mají **3.2.0** (kanál `stable`, vydáno na základě předběžného schválení majitele). Rollback: `"stable": "3.1.1"` + `npm run build` + commit do `main`. Viz [Novinky 3.2](#novinky-32).
 
 **3.1.1** (oprava proti 3.1.0, chyba byla i v 3.0.7):
 - Poptávka s přílohami spouštěla automatické sledování formulářů v GA4 (`form_start` a `form_submit`, zjištěno živě s funkčním gtag.js). Gtag přepisuje `HTMLFormElement.prototype.submit`, proto se skrytý formulář teď odesílá nativní funkcí z prázdného iframe. Ověřeno skutečnou poptávkou: přijata, 0× `form_*`.
