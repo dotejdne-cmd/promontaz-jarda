@@ -37,8 +37,8 @@
   }
   dataLayer.push({ shoptet: base });
   // Simulace shoptet.cartShared.addToCart (na webu ji poskytuje Shoptet). Kód FAIL_* simuluje odmítnutí.
-  if (!q.get('nocart')) window.shoptet = { cartShared: { addToCart: function (o) {
-    window.__demoCart = (window.__demoCart || []).concat([o]);
+  if (!q.get('nocart')) window.shoptet = { cartShared: { addToCart: function (o, silent) {
+    window.__demoCart = (window.__demoCart || []).concat([o]); window.__demoSilent = silent;
     if (!/^FAIL/.test(o.productCode)) setTimeout(function () { document.dispatchEvent(new Event('ShoptetCartUpdated')); }, 300);
   } } };
   // jen pro demo: neodesílá se na FormSubmit, rovnou simuluje návrat po odeslání

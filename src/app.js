@@ -306,6 +306,7 @@ window.__pmjApp = function (X) {
     function finish(ok) {
       if (done) return; done = true; inflight[it.c] = 0;
       document.removeEventListener('ShoptetCartUpdated', onOk);
+      document.removeEventListener('ShoptetCartAddCartItemFailed', onFail);
       track('jarda_add_to_cart', { item_id: it.c, result: ok ? 'ok' : 'fail', quantity: amount, qty_conversion: conv || '' });
       if (ok) {
         CART[it.c] = Math.round(((CART[it.c] || 0) + amount) * 1000) / 1000;
@@ -318,9 +319,14 @@ window.__pmjApp = function (X) {
       else { b.disabled = false; b.textContent = 'Vložit do košíku'; say([p(T('cart_failed')), actions([link('Otevřít produkt', it.u, 'pmj-btn-primary')])], 'pmj-bot', 'cart'); }
     }
     function onOk() { finish(true); }
+    function onFail() { finish(false); }
     document.addEventListener('ShoptetCartUpdated', onOk);
+    document.addEventListener('ShoptetCartAddCartItemFailed', onFail);
     setTimeout(function () { finish(false); }, to);
-    try { window.shoptet.cartShared.addToCart({ productCode: it.c, amount: amount }); } catch (e) { finish(false); }
+    /* 3.2: silent = true (2. parametr Shoptet API) – bez okna „Přidáno do košíku“ (rozšířená objednávka). To okno si bere
+       fokus klávesnice, takže do otevřeného Jardy nešlo psát (na mobilu je navíc schované pod panelem). Potvrzení
+       a „Zobrazit košík“ dává Jarda. ShoptetCartUpdated i hlavička košíku fungují dál (ověřeno živě 20. 11. 2026). */
+    try { window.shoptet.cartShared.addToCart({ productCode: it.c, amount: amount }, true); } catch (e) { finish(false); }
   }
 
   /* Ověřený nákup: údaje (jednotka, balení, min/krok, cena, kód, varianty) ze stránky produktu v e-shopu.

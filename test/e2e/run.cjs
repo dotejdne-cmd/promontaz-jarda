@@ -714,6 +714,7 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     await p4.dblclick('.pmj-bot:last-child .pmj-buy button:has-text("Vložit do košíku")');
     await p4.waitForSelector('.pmj-bot:last-child:has-text("Vloženo do košíku")');
     assert.deepEqual(await p4.evaluate(() => window.__demoCart), [{ productCode: '8061BD', amount: 1 }]);
+    assert.equal(await p4.evaluate(() => window.__demoSilent), true, 'bez okna Shoptetu „Přidáno do košíku“ (bralo fokus z Jardy)');
     assert.ok(await p4.$('.pmj-bot:last-child a:has-text("Zobrazit košík")'));
     await p4.click('.pmj-bot:last-child button:has-text("Pokračovat v nákupu")');
     await p4.waitForSelector('.pmj-bot:last-child:has-text("našel") .pmj-cards');
