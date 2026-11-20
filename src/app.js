@@ -1,6 +1,6 @@
 /* ProMontaz – Jarda v3: aplikace (panel, hledání, seznam, poptávka). Stahuje se až při interakci se zavaděčem. */
 import { st, stJSON, h, abs, fetchJSON, merge, listMerge } from './util.js';
-import { buildIndexAsync, search, prepSynonyms, thumbUrl } from './search.js';
+import { buildIndexAsync, search, prepSynonyms, thumbUrl, unitLabel } from './search.js';
 import { prepRules, classify } from './intent.js';
 import { probe, formText, mailto, copyText, mailBody, noLinks } from './fallback.js';
 import { parseQty, parseLines, qtyLabel } from './qty.js';
@@ -35,6 +35,7 @@ window.__pmjApp = function (X) {
   /* ---------- seznam (localStorage, sdílený s v2) a rozepsaná poptávka (sessionStorage) ---------- */
   function getList() { var l = stJSON('localStorage', 'list', []); return Array.isArray(l) ? l : []; }
   function setList(l) { st('localStorage', 'list', l.length ? JSON.stringify(l) : null); X.updateBadge(); if (countEl) countEl.textContent = l.length ? ' (' + l.length + ')' : ''; }
+  function sameItem(a, b) { return a.n === b.n && (a.u || '') === (b.u || '') && (a.un || '') === (b.un || ''); }
   var ALLOWED = [String(C.shop_base || 'https://www.promontaz.cz/')];
   function addItems(items, source) {
     var l = getList(), n = listMerge(l, items, ALLOWED);
@@ -42,9 +43,11 @@ window.__pmjApp = function (X) {
     return n;
   }
   function addItem(it, source) { return addItems([it], source); }
+  /* Neuvedený počet (q = 0) zůstává neuvedený – v poptávce je výslovně „POČET NEUVEDEN“, nikdy ne 1 ks. */
   function listText(l) {
-    return l.map(function (x) { return qtyLabel(x.q || 1, x.un) + ' ' + (x.f ? 'Dotaz: ' : '') + x.n + (x.c ? ' (kód ' + x.c + ')' : '') + (x.u ? ' – ' + x.u : ''); }).join('\n');
+    return l.map(function (x) { return (x.q ? qtyLabel(x.q, x.un) + ' ' : '') + (x.f ? 'Dotaz: ' : '') + x.n + (x.c ? ' (kód ' + x.c + ')' : '') + (x.u ? ' – ' + x.u : '') + (x.q ? '' : ' – POČET NEUVEDEN'); }).join('\n');
   }
+  function noQty(l) { return l.filter(function (x) { return !x.q; }).length; }
 
   /* ---------- index ---------- */
   var indexP = null;
@@ -67,8 +70,62 @@ window.__pmjApp = function (X) {
     var m = h('div', { class: 'pmj-msg ' + (cls || 'pmj-bot') }, kids);
     log.appendChild(m);
     if (key) blocks[key] = m;
-    scrollEnd();
+    // dlouhá obrazovka (výsledky, poptávka): ukázat její začátek, ne konec
+    if (m.offsetHeight > log.clientHeight - 24) log.scrollTop += m.getBoundingClientRect().top - log.getBoundingClientRect().top - 8;
+    else scrollEnd();
     return m;
+  }
+
+  /* ---------- navigace (3.2): zásobník logických obrazovek ----------
+     Obrazovka = {k klíč, t název, r(replay) vykreslení, c volba}. Vykreslení nemá vedlejší efekty (nic nevkládá do košíku
+     ani do seznamu, nic neodesílá, neměří) – Zpět ho jen zopakuje z dat v paměti. Klíč, který už v zásobníku je, zásobník
+     zkrátí (Seznam → Poptávka → Seznam nevytvoří smyčku). Historie prohlížeče (window.history) se nepoužívá. */
+  var NAV = [], NAV_MAX = 12, lastWork = null, navEl, backEl, homeEl;
+  function screen(k, t, r, choice) {
+    for (var i = 0; i < NAV.length; i++) if (NAV[i].k === k) { NAV.length = i; break; }
+    NAV.push({ k: k, t: t, r: r, c: !!choice });
+    if (NAV.length > NAV_MAX) NAV.splice(1, NAV.length - NAV_MAX);
+    var m = r(false);
+    updNav();
+    return m;
+  }
+  function kind(e) { return e ? e.k.split(':')[0] : ''; }
+  function updNav() {
+    if (!navEl) return;
+    var prev = NAV[NAV.length - 2], cur = NAV[NAV.length - 1];
+    navEl.hidden = !prev && (!cur || cur.k === 'menu'); // bez nabídky v zásobníku (např. po návratu z odeslání) aspoň Hlavní nabídka
+    backEl.hidden = !prev; homeEl.hidden = false;
+    if (!prev) return;
+    backEl.textContent = prev.c ? '← Změnit volbu' : '← ' + prev.t;
+    backEl.setAttribute('aria-label', (prev.c ? 'Změnit volbu: ' : 'Zpět na: ') + prev.t);
+    homeEl.hidden = prev.k === 'menu';
+  }
+  function showEntry(e) {
+    var m = e.r(true);
+    updNav();
+    if (m) { m.setAttribute('tabindex', '-1'); try { m.focus({ preventScroll: true }); } catch (x) {} }
+  }
+  function back() {
+    if (NAV.length < 2) { home(); return; }
+    var cur = NAV.pop(), e = NAV[NAV.length - 1];
+    track('jarda_nav', { nav: 'back', from: kind(cur), to: kind(e) });
+    you(e.c ? 'Změnit volbu' : 'Zpět: ' + e.t);
+    showEntry(e);
+  }
+  function home() {
+    var cur = NAV[NAV.length - 1];
+    if (cur && cur.k !== 'menu') lastWork = cur;
+    track('jarda_nav', { nav: 'home', from: kind(cur) });
+    you('Hlavní nabídka');
+    NAV.length = 0;
+    intro(true);
+    updNav();
+  }
+  function resume(e) {
+    track('jarda_nav', { nav: 'resume', to: kind(e) });
+    you('Pokračovat: ' + e.t);
+    NAV.length = 1; NAV.push(e); lastWork = null;
+    showEntry(e);
   }
   function you(t) { say([h('p', { text: t })], 'pmj-you'); }
   function p(t, cls) { return h('p', { text: t, class: cls || null }); }
@@ -154,31 +211,84 @@ window.__pmjApp = function (X) {
     }));
   }
 
+  /* Hlavní nabídka. „Pokračovat“ vrací do rozpracované činnosti (v paměti), po načtení jiné stránky do seznamu,
+     rozepsané poptávky nebo posledního hledání (sessionStorage/localStorage). */
+  var cartStale = false, firstIntro = true;
+  function resumeRow() {
+    var r = [], d = draftGet(), n = getList().length, lq = lastQuery || st('sessionStorage', 'lastq');
+    if (lastWork) r.push(btn('Pokračovat: ' + lastWork.t, function () { resume(lastWork); }, 'pmj-btn-primary'));
+    else {
+      if (draftHas(d) || Q.files.length) r.push(btn('Dokončit rozepsanou poptávku', function () { you('Dokončit poptávku'); showQuote('resume'); }, 'pmj-btn-primary'));
+      else if (n) r.push(btn('Seznam k nacenění (' + n + ')', function () { you('Seznam k nacenění'); showList(); }, 'pmj-btn-primary'));
+      if (lq) r.push(btn('Poslední hledání: „' + short(lq, 28) + '“', function () { track('jarda_nav', { nav: 'resume', to: 'results' }); you(lq); runQuery(lq); }));
+    }
+    return r.length ? h('div', { class: 'pmj-resume' }, [p('Pokračovat, kde jste skončili:', 'pmj-small'), actions(r)]) : null;
+  }
   function intro() {
-    var kids = [p(T('greeting'))], miss = cartMissing();
-    if (miss > 0) kids.push(p(T('cart_missing', { x: kc(miss) }), 'pmj-note'));
-    var ci = cartInfo();
-    if (ci && C.context && C.context.cart_quote_chip !== false) kids.push(p(T('cart_quote'), 'pmj-small'));
-    var m = say(kids.concat([chipRow(chipDefs())]), 'pmj-bot', 'intro');
-    if (miss > 0) {
-      var stale = function () { remove(m.querySelector('.pmj-note')); };
+    var m = screen('menu', 'Nabídka', function () {
+      var kids = [p(T('greeting'))], miss = cartStale ? 0 : cartMissing();
+      if (miss > 0) kids.push(p(T('cart_missing', { x: kc(miss) }), 'pmj-note'));
+      var ci = cartInfo();
+      if (ci && C.context && C.context.cart_quote_chip !== false) kids.push(p(T('cart_quote'), 'pmj-small'));
+      kids.push(resumeRow());
+      return say(kids.concat([chipRow(chipDefs())]), 'pmj-bot', 'intro');
+    }, true);
+    if (firstIntro) {
+      firstIntro = false;
+      var stale = function () { cartStale = true; if (blocks.intro) remove(blocks.intro.querySelector('.pmj-note')); };
       document.addEventListener('ShoptetCartUpdated', stale);
       document.addEventListener('ShoptetDOMCartContentLoaded', stale);
+      checkUnconfirmed();
     }
-    checkUnconfirmed();
+    return m;
   }
+  function short(t, n) { t = String(t || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
 
   /* ---------- hledání ---------- */
+  var lastQuery = '';
   function find() {
-    say([p(T('search_prompt') + ' ' + (T('search_qty_hint') || ''))]);
+    screen('find', 'Hledání', function () {
+      var lq = lastQuery;
+      return say([p(T('search_prompt') + ' ' + (T('search_qty_hint') || '')), lq ? actions([btn('Upravit „' + short(lq, 28) + '“', editQuery)]) : null], 'pmj-bot', 'find');
+    });
     getIndex().catch(function () {});
     input.focus();
   }
+  /* Oprava posledního dotazu: vrátí ho do pole (včetně množství), bez nového hledání. */
+  function editQuery() {
+    var lq = lastQuery || st('sessionStorage', 'lastq') || '';
+    track('jarda_nav', { nav: 'edit_query' });
+    input.value = lq;
+    input.focus();
+    try { input.setSelectionRange(0, lq.length); } catch (e) {}
+  }
 
-  function addFree(q, req) { addItem({ n: q, f: 1, q: req && req.q || 1, un: req && req.unit || '' }, 'free_text'); added(); }
-  function added() {
-    say([p(T('added') + ' Položek v seznamu: ' + getList().length + '.'),
-      actions([btn('Zobrazit seznam', showList), btn('Nacenit seznam', function () { showQuote('added'); }, 'pmj-btn-primary')])], 'pmj-bot', 'added');
+  /* Vložení do seznamu: požadované množství a jednotka se zachovají; bez množství zůstane „počet neuveden“. */
+  function addFree(q, req) { var it = { n: q, f: 1, q: req && req.q || 0, un: req && req.unit || '' }; addItem(it, 'free_text'); added(it); }
+  function qtyBox(match, label) {
+    var cur = getList().filter(function (x) { return sameItem(x, match); })[0] || match;
+    var qi = h('input', { type: 'number', class: 'pmj-qty', min: '0', step: 'any', inputmode: 'decimal', value: cur.q ? String(cur.q) : '', placeholder: 'počet',
+      'aria-label': 'Množství' + (cur.un ? ' (' + cur.un + ')' : '') + ': ' + (label || cur.n) });
+    qi.addEventListener('change', function () {
+      var raw = String(qi.value).trim(), v = parseFloat(raw.replace(',', '.')), l = getList(), it = l.filter(function (x) { return sameItem(x, match); })[0];
+      if (!it) return;
+      if (raw === '') v = 0; else if (!isFinite(v) || v < 0) { qi.value = it.q ? String(it.q) : ''; return; }
+      it.q = Math.min(100000, Math.round(v * 1000) / 1000);
+      qi.value = it.q ? String(it.q) : '';
+      setList(l);
+      var row = qi.closest('.pmj-row'); if (row) row.classList.toggle('pmj-row-noq', !it.q);
+    });
+    return qi;
+  }
+  function added(it) {
+    var kids = [p(T('added') + ' Položek v seznamu: ' + getList().length + '.')];
+    if (it && it.n) {
+      var m = { n: it.n, u: it.u || '', un: it.un || '' };
+      kids.push(h('div', { class: 'pmj-row pmj-added' }, [h('span', { class: 'pmj-row-name', text: it.n }), qtyBox(m), m.un ? h('span', { class: 'pmj-un', text: m.un }) : null]));
+      if (!it.q) kids.push(p('Doplňte prosím počet – nebo ho s vámi upřesní obchodník.', 'pmj-small'));
+    }
+    kids.push(actions([btn('Zobrazit seznam', showList), btn('Nacenit seznam', function () { showQuote('added'); }, 'pmj-btn-primary')]));
+    say(kids, 'pmj-bot', 'added');
   }
 
   function cartAllowed(it) {
@@ -187,20 +297,36 @@ window.__pmjApp = function (X) {
   }
   /* Vložení do košíku přes Shoptet (shoptet.cartShared.addToCart podle kódu produktu, jen produkty bez variant).
      Úspěch hlásíme až po události ShoptetCartUpdated, jinak odkaz na produkt. */
+  var CART = {}, inflight = {}; // vloženo z Jardy na této stránce (kód → množství); probíhající vložení
   function addToCart(it, amount, b, label, conv) {
+    if (inflight[it.c]) return; // dvojklik nebo druhé tlačítko téhož produktu: nic dalšího se nevkládá
+    inflight[it.c] = 1;
     b.disabled = true; b.textContent = 'Vkládám…';
     var done = false, to = (A.cart_add && A.cart_add.confirm_timeout_ms) || 6000;
     function finish(ok) {
-      if (done) return; done = true;
+      if (done) return; done = true; inflight[it.c] = 0;
       document.removeEventListener('ShoptetCartUpdated', onOk);
+      document.removeEventListener('ShoptetCartAddCartItemFailed', onFail);
       track('jarda_add_to_cart', { item_id: it.c, result: ok ? 'ok' : 'fail', quantity: amount, qty_conversion: conv || '' });
-      if (ok) { b.textContent = '✓ V košíku'; say([p(T('cart_added') + ' ' + label + ' – ' + it.n + '.'), actions([link('Zobrazit košík', '/kosik/', 'pmj-btn-primary'), btn('Hledat další', find)])], 'pmj-bot', 'cart'); }
+      if (ok) {
+        CART[it.c] = Math.round(((CART[it.c] || 0) + amount) * 1000) / 1000;
+        b.textContent = '✓ V košíku';
+        var prev = NAV[NAV.length - 2], acts = [link('Zobrazit košík', '/kosik/', 'pmj-btn-primary')];
+        if (kind(NAV[NAV.length - 1]) === 'product' && kind(prev) === 'results') acts.push(btn('Pokračovat v nákupu', function () { NAV.pop(); you('Zpět: ' + prev.t); showEntry(prev); }));
+        acts.push(btn('Hledat další', function () { you('Hledat další'); find(); }));
+        say([p(T('cart_added') + ' ' + label + ' – ' + it.n + '.'), p(T('cart_next') || 'Objednávku dokončíte v košíku e-shopu.', 'pmj-small'), actions(acts)], 'pmj-bot', 'cart');
+      }
       else { b.disabled = false; b.textContent = 'Vložit do košíku'; say([p(T('cart_failed')), actions([link('Otevřít produkt', it.u, 'pmj-btn-primary')])], 'pmj-bot', 'cart'); }
     }
     function onOk() { finish(true); }
+    function onFail() { finish(false); }
     document.addEventListener('ShoptetCartUpdated', onOk);
+    document.addEventListener('ShoptetCartAddCartItemFailed', onFail);
     setTimeout(function () { finish(false); }, to);
-    try { window.shoptet.cartShared.addToCart({ productCode: it.c, amount: amount }); } catch (e) { finish(false); }
+    /* 3.2: silent = true (2. parametr Shoptet API) – bez okna „Přidáno do košíku“ (rozšířená objednávka). To okno si bere
+       fokus klávesnice, takže do otevřeného Jardy nešlo psát (na mobilu je navíc schované pod panelem). Potvrzení
+       a „Zobrazit košík“ dává Jarda. ShoptetCartUpdated i hlavička košíku fungují dál (ověřeno živě 20. 11. 2026). */
+    try { window.shoptet.cartShared.addToCart({ productCode: it.c, amount: amount }, true); } catch (e) { finish(false); }
   }
 
   /* Ověřený nákup: údaje (jednotka, balení, min/krok, cena, kód, varianty) ze stránky produktu v e-shopu.
@@ -208,21 +334,21 @@ window.__pmjApp = function (X) {
   var UL = { ks: 'ks', bal: 'bal.', m: 'm', m2: 'm²' };
   function uLabel(u) { return UL[u] || u || 'ks'; }
   function fmtQ(x) { return String(x).replace('.', ','); }
-  function buyBox(it, req, li, opener) {
-    if (li.__buy) { opener.focus(); return; }
+  function buyBox(it, req, li, replay) {
     var box = h('div', { class: 'pmj-buy', 'aria-live': 'polite' }, [p('Ověřuji balení a cenu v e-shopu…', 'pmj-small')]);
-    li.__buy = box; li.appendChild(box);
+    li.appendChild(box);
     var ca = A.cart_add || {};
+    function tr(o) { if (!replay) track('jarda_cart_verify', o); } // Zpět na produkt nic znovu neměří
     fetchProduct(it.u, ALLOWED, ca.verify_timeout_ms || 8000).then(function (f) {
       box.textContent = '';
-      if (f.variants) { track('jarda_cart_verify', { item_id: it.c, result: 'variant' }); box.appendChild(p(T('variant_hint'), 'pmj-small')); box.appendChild(actions([link('Vybrat variantu', it.u, 'pmj-btn-primary')])); return; }
+      if (f.variants) { tr({ item_id: it.c, result: 'variant' }); box.appendChild(p(T('variant_hint'), 'pmj-small')); box.appendChild(actions([link('Vybrat variantu', it.u, 'pmj-btn-primary')])); return; }
       if (!sameCode(f.code, it.c) || f.price == null) {
-        track('jarda_cart_verify', { item_id: it.c, result: 'mismatch' });
+        tr({ item_id: it.c, result: 'mismatch' });
         box.appendChild(p(T('verify_mismatch') || 'Údaje produktu se teď nepodařilo ověřit. Otevřete prosím produkt, cenu a balení uvidíte tam.', 'pmj-small'));
         box.appendChild(actions([link('Otevřít produkt', it.u, 'pmj-btn-primary')])); return;
       }
       var pl = plan(f, req), unit = uLabel(f.unit);
-      track('jarda_cart_verify', { item_id: it.c, result: 'ok', qty_conversion: pl.conv });
+      tr({ item_id: it.c, result: 'ok', qty_conversion: pl.conv });
       var qi = h('input', { type: 'number', class: 'pmj-qty', min: String(f.min || 1), step: String(f.step || 1), max: f.max != null ? String(f.max) : null, inputmode: f.dec ? 'decimal' : 'numeric', value: String(pl.amount), 'aria-label': 'Množství v ' + unit + ': ' + it.n });
       var tot = h('span', { class: 'pmj-price' }), info = [];
       var packTxt = f.pack && f.pack.n > 1 ? 'Prodává se po ' + unit + (f.unit === 'bal' ? ' (' + fmtQ(f.pack.n) + ' ' + uLabel(f.pack.unit) + ')' : '; obsah balení ' + fmtQ(f.pack.n) + ' ' + uLabel(f.pack.unit)) + '.' : 'Prodává se po ' + unit + '.';
@@ -231,6 +357,7 @@ window.__pmjApp = function (X) {
       else if (pl.conv === 'ask' && req && req.q) info.push('Chcete ' + qtyLabel(req.q, req.unit) + ' – nastavte prosím počet v ' + unit + '.');
       if (pl.note === 'rounded') info.push('Upraveno na nejbližší prodávané množství.');
       if (f.min > 1 || f.step > 1) info.push('Nejmenší množství ' + fmtQ(f.min) + ' ' + unit + (f.step > 1 ? ', po ' + fmtQ(f.step) : '') + '.');
+      if (CART[it.c]) info.push('Z Jardy už máte v košíku ' + fmtQ(CART[it.c]) + ' ' + unit + ' – další vložení se k nim přičte.');
       var b2b = (ca.b2b_hint_from_czk || 15000), hint = p('', 'pmj-note');
       function val() { var v = parseFloat(String(qi.value).replace(',', '.')); return isFinite(v) && v > 0 ? v : 0; }
       function upd() {
@@ -250,35 +377,45 @@ window.__pmjApp = function (X) {
       box.appendChild(p(info.join(' '), 'pmj-small'));
       box.appendChild(h('div', { class: 'pmj-buyrow' }, [h('label', { class: 'pmj-buyq' }, [qi, h('span', { text: ' ' + unit })]), tot]));
       box.appendChild(hint);
-      box.appendChild(actions([go, btn('Nacenit', function () {
-        addItem({ n: it.n, c: it.c, u: it.u, q: val() || 1, un: f.unit in UL ? f.unit : '' }, 'buy_quote'); added();
-      })]));
+      var nb = btn('Nacenit', function () {
+        var x = { n: it.n, c: it.c, u: it.u, q: val() || 0, un: f.unit in UL ? f.unit : '' };
+        addItem(x, 'buy_quote'); nb.disabled = true; nb.textContent = '✓ V seznamu'; added(x);
+      });
+      box.appendChild(actions([go, nb]));
       upd();
-      (pl.conv === 'ask' ? qi : go).focus();
+      if (!replay) (pl.conv === 'ask' ? qi : go).focus();
     }, function (e) {
-      track('jarda_cart_verify', { item_id: it.c, result: 'error' });
+      tr({ item_id: it.c, result: 'error' });
       box.textContent = '';
       box.appendChild(p(T('verify_failed') || 'Balení a cenu se teď nepodařilo ověřit. Otevřete prosím produkt, nebo ho přidejte k nacenění.', 'pmj-small'));
       box.appendChild(actions([link('Otevřít produkt', it.u, 'pmj-btn-primary')]));
     });
   }
 
-  function card(it, pos, q, source, req) {
-    var add = h('button', { type: 'button', class: 'pmj-btn pmj-btn-primary pmj-add', text: '+ k nacenění', 'aria-label': 'Přidat k nacenění: ' + it.n });
-    add.addEventListener('click', function () { addItem({ n: it.n, c: it.c, u: it.u, q: req && req.q || 1, un: req && req.unit || '' }, source || 'search'); add.textContent = '✓ V seznamu'; add.disabled = true; added(); });
+  function inList(it) { return !!it.u && getList().some(function (x) { return x.u === it.u; }); }
+  /* detail = karta na obrazovce produktu (s ověřeným nákupem), jinak karta ve výsledcích */
+  function card(it, pos, q, source, req, detail) {
+    var has = inList(it);
+    var add = h('button', { type: 'button', class: 'pmj-btn pmj-add ' + (detail ? 'pmj-btn-ghost' : 'pmj-btn-primary') /* u produktu je hlavní akce nákup */, text: has ? '✓ V seznamu' : '+ k nacenění', disabled: has, 'aria-label': has ? 'V seznamu: ' + it.n : 'Přidat k nacenění: ' + it.n });
+    add.addEventListener('click', function () {
+      if (inList(it)) { add.textContent = '✓ V seznamu'; add.disabled = true; return; }
+      var x = { n: it.n, c: it.c, u: it.u, q: req && req.q || 0, un: req && req.unit || '' };
+      addItem(x, source || 'search'); add.textContent = '✓ V seznamu'; add.disabled = true; added(x);
+    });
     var btns = [add], li;
-    if (cartAllowed(it)) {
+    if (cartAllowed(it) && !detail) {
       var cb = h('button', { type: 'button', class: 'pmj-btn pmj-btn-ghost pmj-add', text: 'Do košíku', 'aria-label': 'Do košíku (ověřit balení): ' + it.n });
-      cb.addEventListener('click', function () { track('jarda_chip_click', { chip: 'buy' }); buyBox(it, req, li, cb); });
+      cb.addEventListener('click', function () { track('jarda_chip_click', { chip: 'buy' }); you('Do košíku: ' + short(it.n, 40)); productScreen(it, req, q, pos); });
       btns.push(cb);
     } else if (it.v) btns.push(link('Vybrat variantu', it.u, 'pmj-btn-ghost pmj-add'));
+    var ul = unitLabel(it.un, it.pk);
     var src = thumb(it);
     function clickTrack() { track('jarda_product_click', { item_id: it.c, index: pos + 1, search_term: q || '' }); }
     li = h('li', { class: 'pmj-card' }, [
       src ? h('img', { class: 'pmj-thumb', src: src, alt: '', width: '56', height: '56', loading: 'lazy', decoding: 'async', onerror: function () { this.style.visibility = 'hidden'; } }) : h('span', { class: 'pmj-thumb' }),
       h('div', { class: 'pmj-card-body' }, [
         h('a', { class: 'pmj-card-name', href: it.u, text: it.n, onclick: clickTrack }),
-        it.p != null ? h('span', { class: 'pmj-price' }, [(it.v ? 'od ' : '') + kc(it.p), h('small', { text: ' s DPH' })]) : null,
+        it.p != null ? h('span', { class: 'pmj-price' }, [(it.v ? 'od ' : '') + kc(it.p) + (ul ? ' ' + ul : ''), h('small', { text: ' s DPH' })]) : null,
         it.c ? h('span', { class: 'pmj-code', text: 'Kód: ' + it.c }) : null
       ]),
       h('div', { class: 'pmj-card-actions' }, btns)
@@ -286,6 +423,15 @@ window.__pmjApp = function (X) {
     return li;
   }
   function cards(list, q, source, req) { return h('ul', { class: 'pmj-cards' }, list.map(function (it, i) { return card(it, i, q, source, req); })); }
+  /* Produkt: ověření balení a ceny na stránce e-shopu (výsledek se pamatuje, Zpět nic znovu nestahuje). */
+  function productScreen(it, req, q, pos) {
+    var k = 'product:' + (it.c || it.u);
+    return screen(k, short(it.n, 34), function (rp) {
+      var li = card(it, pos, q, 'search', req, true);
+      if (cartAllowed(it)) buyBox(it, req, li, rp);
+      return say([h('ul', { class: 'pmj-cards' }, [li])], 'pmj-bot', k);
+    });
+  }
 
   /* odkaz na kalkulačku k dotazu (OSB → kalkulačka OSB); jen ověřené adresy z config.app.json */
   function calcFor(q) {
@@ -297,66 +443,87 @@ window.__pmjApp = function (X) {
   }
 
   function doSearch(q, onZero, after, req) {
-    var wait = say([p(T('loading'))], 'pmj-bot pmj-wait');
+    var wait = say([p(T('loading'))], 'pmj-bot pmj-wait'), label = label0(q, req), k = 'results:' + label.toLowerCase(), title = '„' + short(label, 26) + '“';
+    lastQuery = label; st('sessionStorage', 'lastq', label);
+    function edit() { return btn('Upravit hledání', function () { you('Upravit hledání'); editQuery(); }); }
     getIndex().then(function (idx) {
       remove(wait);
       var r = search(idx, q, { limit: 5, replace: C.search_replace, synonyms: SYN });
       track('jarda_search', { search_term: q, results_count: r.total, page_type: SD.pageType || '', has_qty: !!(req && req.q) });
-      var label = req && req.q ? qtyLabel(req.q, req.unit) + ' ' + q : q;
       if (!r.total) {
         track('jarda_search_no_results', { search_term: q, missing_term: r.missing.join(' ') });
         if (onZero) { onZero(); return; }
-        var kids = [p(r.missing.length && r.partial ? T('results_partial', { q: q, w: r.partial.without }) : T('no_results')), p(T('no_results_quote'), 'pmj-small')];
-        var acts = [btn('Přidat „' + label + '“ k nacenění', function () { addFree(q, req); }, 'pmj-btn-primary')];
-        if (r.partial) acts.unshift(btn(T('partial_btn', { q: r.partial.query, n: r.partial.total }), function () {
-          track('jarda_chip_click', { chip: 'partial' });
-          say([p(T('partial_note', { w: r.partial.without }), 'pmj-note'), cards(r.partial.results, q, 'partial', req)]);
-        }));
-        acts.push(btn('Poslat fotku nebo seznam', function () { showQuote('no_results'); }));
-        kids.push(actions(acts));
-        say(kids);
+        screen(k, 'Hledání ' + title, function () {
+          var kids = [p(r.missing.length && r.partial ? T('results_partial', { q: q, w: r.partial.without }) : T('no_results')), p(T('no_results_quote'), 'pmj-small')];
+          var acts = [btn('Přidat „' + label + '“ k nacenění', function () { addFree(q, req); }, 'pmj-btn-primary')];
+          if (r.partial) acts.unshift(btn(T('partial_btn', { q: r.partial.query, n: r.partial.total }), function () {
+            track('jarda_chip_click', { chip: 'partial' });
+            screen('partial:' + label.toLowerCase(), 'Výsledky bez „' + r.partial.without + '“', function () {
+              return say([p(T('partial_note', { w: r.partial.without }), 'pmj-note'), cards(r.partial.results, q, 'partial', req)], 'pmj-bot', 'partial:' + label.toLowerCase());
+            });
+          }));
+          acts.push(edit());
+          acts.push(btn('Poslat fotku nebo seznam', function () { showQuote('no_results'); }));
+          kids.push(actions(acts));
+          return say(kids, 'pmj-bot', k);
+        });
         if (after) after();
         return;
       }
-      var kids2 = [p(req && req.q ? (T('results_qty') || 'Pro {qty} jsem v katalogu našel:').replace('{qty}', qtyLabel(req.q, req.unit)) : T('results')), cards(r.results, q, 'search', req)];
-      if (r.total > r.results.length) kids2.push(h('p', { class: 'pmj-small' }, [T('results_more', { n: r.total }) + ' ',
-        h('a', { href: '/vyhledavani/?string=' + encodeURIComponent(q), text: 'Zobrazit všech ' + r.total + ' v e-shopu' })]));
-      kids2.push(p(T('price_note'), 'pmj-small'));
-      kids2.push(calcFor(q));
-      kids2.push(h('p', { class: 'pmj-small' }, [T('not_listed') + ' ', h('button', { type: 'button', class: 'pmj-linkbtn', text: 'Přidat „' + label + '“', onclick: function () { addFree(q, req); } })]));
-      say(kids2);
+      screen(k, 'Výsledky ' + title, function () {
+        var kids2 = [p(req && req.q ? (T('results_qty') || 'Pro {qty} jsem v katalogu našel:').replace('{qty}', qtyLabel(req.q, req.unit)) : T('results')), cards(r.results, q, 'search', req)];
+        if (r.total > r.results.length) kids2.push(h('p', { class: 'pmj-small' }, [T('results_more', { n: r.total }) + ' ',
+          h('a', { href: '/vyhledavani/?string=' + encodeURIComponent(q), text: 'Zobrazit všech ' + r.total + ' v e-shopu' })]));
+        kids2.push(p(T('price_note'), 'pmj-small'));
+        kids2.push(calcFor(q));
+        kids2.push(h('p', { class: 'pmj-small' }, [T('not_listed') + ' ', h('button', { type: 'button', class: 'pmj-linkbtn', text: 'Přidat „' + label + '“', onclick: function () { addFree(q, req); } })]));
+        kids2.push(actions([edit()]));
+        return say(kids2, 'pmj-bot', k);
+      });
       if (after) after();
     }, function () {
       remove(wait);
       track('jarda_search', { search_term: q, results_count: -1, index_error: true });
-      say([p(T('index_error')), actions([btn('Přidat „' + label0(q, req) + '“ k nacenění', function () { addFree(q, req); }, 'pmj-btn-primary'), waButton(null, 'index_error')])]);
+      screen(k, 'Hledání ' + title, function () {
+        return say([p(T('index_error')), actions([btn('Přidat „' + label + '“ k nacenění', function () { addFree(q, req); }, 'pmj-btn-primary'), waButton(null, 'index_error'), edit()])], 'pmj-bot', k);
+      });
     });
   }
   function label0(q, req) { return req && req.q ? qtyLabel(req.q, req.unit) + ' ' + q : q; }
 
   /* ---------- vložený seznam materiálu ---------- */
+  var importText = ''; // rozepsaný vložený seznam (jen v paměti) – Zpět ani Upravit seznam ho nesmažou
   function importForm(prefill) {
-    var ta = h('textarea', { rows: '6', class: 'pmj-input', placeholder: 'Každá položka na nový řádek, např.\n200 ks vrut 5x60\nkabel CYKY 3x2,5 50 m\n12× OSB 18', 'aria-label': 'Seznam materiálu' });
-    if (typeof prefill === 'string') ta.value = prefill;
-    var go = btn('Najít v katalogu', function () { var v = ta.value.trim(); if (!v) { ta.focus(); return; } importList(v); }, 'pmj-btn-primary');
-    say([p(T('import_intro') || 'Vložte seznam (i z Excelu nebo e-mailu). Ke každé položce najdu produkt v katalogu a upozorním, co je potřeba upřesnit.'), ta, actions([go])], 'pmj-bot', 'import');
+    if (typeof prefill === 'string') importText = prefill;
+    var ta;
+    screen('import', 'Vložit seznam', function () {
+      ta = h('textarea', { rows: '6', class: 'pmj-input', placeholder: 'Každá položka na nový řádek, např.\n200 ks vrut 5x60\nkabel CYKY 3x2,5 50 m\n12× OSB 18', 'aria-label': 'Seznam materiálu' });
+      ta.value = importText;
+      ta.addEventListener('input', function () { importText = ta.value; });
+      var go = btn('Najít v katalogu', function () { var v = ta.value.trim(); if (!v) { ta.focus(); return; } importList(v); }, 'pmj-btn-primary');
+      return say([p(T('import_intro') || 'Vložte seznam (i z Excelu nebo e-mailu). Ke každé položce najdu produkt v katalogu a upozorním, co je potřeba upřesnit.'), ta, actions([go])], 'pmj-bot', 'import');
+    });
     ta.focus();
   }
+  /* řádek vloženého seznamu jako text k nacenění: bez množství v názvu, počet zvlášť (neuvedený zůstane neuvedený) */
+  function lineItem(l) { return l.q ? { n: l.query || l.raw, f: 1, q: l.q, un: l.unit || '' } : { n: l.raw, f: 1, q: 0 }; }
   function importList(text) {
+    importText = text;
     var lines = parseLines(text, (A.import && A.import.max_lines) || 50);
     if (!lines.length) { say([p('V textu jsem nenašel žádnou položku. Napište název materiálu, každý na nový řádek.')]); return; }
     var wait = say([p('Hledám ' + lines.length + ' položek v katalogu…')], 'pmj-bot pmj-wait');
     getIndex().then(function (idx) {
-      remove(wait); remove(blocks.import);
-      var st0 = { ok: 0, check: 0, none: 0, qty: 0 };
+      remove(wait);
+      var st0 = { ok: 0, check: 0, none: 0, qty: 0 }, done = false;
       var rows = lines.map(function (l) {
         var r = search(idx, l.query, { limit: 3, replace: C.search_replace, synonyms: SYN }), top = r.results[0];
         var spec = /\d/.test(l.query) || (top && sameCode(l.query.trim(), top.c));
         var status = !r.total ? 'none' : (r.total > 3 && !spec ? 'check' : 'ok');
         st0[status]++; if (!l.q) st0.qty++;
-        return { l: l, top: top, total: r.total, status: status };
+        return { l: l, top: top, total: r.total, status: status, on: status === 'ok' && !!top };
       });
       track('jarda_list_import', { lines: lines.length, matched: st0.ok, ambiguous: st0.check, unmatched: st0.none, missing_qty: st0.qty });
+      screen('imported', 'Kontrola seznamu', function () {
       var ul = h('ul', { class: 'pmj-rows pmj-imp' }, rows.map(function (r, i) {
         var warn = [];
         if (!r.l.q) warn.push('chybí počet');
@@ -364,36 +531,40 @@ window.__pmjApp = function (X) {
         if (r.status === 'none') warn.push('v katalogu nevidím – naceníme podle popisu');
         // nejasná položka (např. jen „hmoždinka“): žádný náhodný návrh, jen odkaz na výběr v katalogu
         var cbx = r.top && r.status === 'ok' ? h('input', { type: 'checkbox', class: 'pmj-cbx', 'aria-label': 'Použít navržený produkt pro: ' + r.l.raw }) : null;
-        if (cbx) cbx.checked = true;
-        r.cbx = cbx;
+        if (cbx) { cbx.checked = r.on; cbx.disabled = done; cbx.addEventListener('change', function () { r.on = cbx.checked; }); }
         return h('li', { class: 'pmj-imp-row pmj-imp-' + r.status }, [
           h('span', { class: 'pmj-imp-q', text: r.l.q ? qtyLabel(r.l.q, r.l.unit) : '?' }),
           h('div', { class: 'pmj-imp-body' }, [
             h('span', { class: 'pmj-imp-raw', text: r.l.query }),
-            cbx ? h('label', { class: 'pmj-imp-match' }, [cbx, ' ', h('a', { href: r.top.u, text: r.top.n, target: '_blank', rel: 'noopener' }), r.top.p != null ? ' · ' + (r.top.v ? 'od ' : '') + kc(r.top.p) : '']) : null,
+            cbx ? h('label', { class: 'pmj-imp-match' }, [cbx, ' ', h('span', {}, [h('span', { class: 'pmj-tag', text: 'Návrh' }), ' ', h('a', { href: r.top.u, text: r.top.n, target: '_blank', rel: 'noopener' }),
+              r.top.p != null ? ' · ' + (r.top.v ? 'od ' : '') + kc(r.top.p) + (unitLabel(r.top.un, r.top.pk) ? ' ' + unitLabel(r.top.un, r.top.pk) : '') : ''])]) : null,
             r.status === 'check' ? h('a', { class: 'pmj-imp-match', href: '/vyhledavani/?string=' + encodeURIComponent(r.l.query), target: '_blank', rel: 'noopener', text: 'Vybrat v katalogu (' + r.total + ')' }) : null,
             warn.length ? h('span', { class: 'pmj-imp-warn', text: warn.join(' · ') }) : null
           ])
         ]);
       }));
-      var addAll = btn('Přidat vše k nacenění (' + rows.length + ')', function () {
+      var addAll = btn(done ? '✓ Přidáno' : 'Přidat vše k nacenění (' + rows.length + ')', function () {
+        if (done) return; // jednou – ani po Zpět se seznam nepřidá podruhé
+        done = true;
         var items = rows.map(function (r) {
-          if (r.cbx && r.cbx.checked) return { n: r.top.n, c: r.top.c, u: r.top.u, q: r.l.q || 1, un: r.l.unit };
-          return { n: r.l.raw, f: 1, q: 1 };
+          if (r.on && r.top) return { n: r.top.n, c: r.top.c, u: r.top.u, q: r.l.q || 0, un: r.l.unit };
+          return lineItem(r.l);
         });
         addItems(items, 'import');
         track('jarda_chip_click', { chip: 'import_add' });
         addAll.disabled = true; addAll.textContent = '✓ Přidáno';
         showQuote('import');
-      }, 'pmj-btn-primary');
+      }, 'pmj-btn-primary', { disabled: done });
       var kids = [p('Výsledek: ' + st0.ok + ' nalezeno, ' + st0.check + ' k upřesnění, ' + st0.none + ' mimo katalog' + (st0.qty ? ', u ' + st0.qty + ' chybí počet' : '') + '.', 'pmj-title'),
         p(T('import_note') || 'Zaškrtnuté položky přidám jako konkrétní produkt, ostatní jako text k nacenění. Cenu, balení a dostupnost potvrdí obchodník.', 'pmj-small'), ul,
-        actions([addAll, btn('Upravit seznam', function () { importForm(text); })])];
+        actions([addAll, done ? null : btn('Upravit seznam', function () { you('Upravit seznam'); importForm(text); })])];
       if (rows.length >= ((A.import && A.import.b2b_lines) || 8)) kids.splice(1, 0, p(T('import_b2b') || 'Větší seznam vám obchodník nacení i s dopravou na stavbu.', 'pmj-note'));
-      say(kids, 'pmj-bot', 'imported');
+      return say(kids, 'pmj-bot', 'imported');
+      });
     }, function () {
       remove(wait);
-      say([p(T('index_error')), actions([btn('Poslat seznam k nacenění', function () { addItems(lines.map(function (l) { return { n: l.raw, f: 1 }; }), 'import'); showQuote('import'); }, 'pmj-btn-primary')])]);
+      var sent = false;
+      say([p(T('index_error')), actions([btn('Poslat seznam k nacenění', function () { if (!sent) { sent = true; addItems(lines.map(lineItem), 'import'); } showQuote('import'); }, 'pmj-btn-primary')])]);
     });
   }
 
@@ -402,7 +573,8 @@ window.__pmjApp = function (X) {
     var pr = currentProduct();
     if (!pr) { find(); return; }
     addItem(pr, 'product');
-    say([p(T('product_bulk')), p('„' + pr.n + '“ – ' + pr.q + '× je v seznamu. Množství upravíte v seznamu.'),
+    var m = { n: pr.n, u: pr.u, un: '' };
+    say([p(T('product_bulk')), h('div', { class: 'pmj-row pmj-added' }, [h('span', { class: 'pmj-row-name', text: pr.n }), qtyBox(m)]), p('Počet můžete upravit tady nebo v seznamu.', 'pmj-small'),
       actions([btn('Nacenit seznam', function () { showQuote('product'); }, 'pmj-btn-primary'), btn('Přidat další materiál', find), btn('Zobrazit seznam', showList)])], 'pmj-bot', 'added');
   }
   function showSet() {
@@ -411,8 +583,7 @@ window.__pmjApp = function (X) {
       remove(wait);
       var found = [];
       codes.forEach(function (c) { var k = c.toLowerCase().replace(/[\s_\-./]/g, ''); for (var i = 0; i < idx.length; i++) if (idx[i].ck.indexOf(k) > -1) { found.push(idx[i]); break; } });
-      if (!found.length) { say([p(T('set_none'))]); return; }
-      say([p(T('set_title')), cards(found, '', 'set'), p(T('price_note'), 'pmj-small')]);
+      screen('set', 'Obsah sady', function () { return say(found.length ? [p(T('set_title')), cards(found, '', 'set'), p(T('price_note'), 'pmj-small')] : [p(T('set_none'))], 'pmj-bot', 'set'); });
     }, function () { remove(wait); say([p(T('index_error'))]); });
   }
   function cartToQuote() {
@@ -429,37 +600,47 @@ window.__pmjApp = function (X) {
   }
 
   /* ---------- seznam ---------- */
+  /* Seznam: počet (prázdný = neuveden), jednotka, odebrání s možností vrátit. Produkt z katalogu je odlišený od textu k upřesnění. */
+  var undo = null;
   function showList() {
-    var box = h('div', { class: 'pmj-list' });
-    track('jarda_list_view', { list_count: getList().length });
-    function render() {
-      var l = getList();
+    return screen('list', 'Seznam', function (rp) {
+      var box = h('div', { class: 'pmj-list' });
+      if (!rp) track('jarda_list_view', { list_count: getList().length });
+      undo = null;
+      function render() {
+      var l = getList(), miss = noQty(l);
       box.textContent = '';
-      box.appendChild(p(T('list_title'), 'pmj-title'));
+      box.appendChild(p(T('list_title') + (l.length ? ' (' + l.length + ')' : ''), 'pmj-title'));
+      if (undo) box.appendChild(h('p', { class: 'pmj-small' }, ['Odebráno: ' + short(undo.x.n, 40) + ' · ', h('button', { type: 'button', class: 'pmj-linkbtn', text: 'Vrátit', onclick: function () {
+        var cur = getList(); cur.splice(Math.min(undo.i, cur.length), 0, undo.x); undo = null; setList(cur); render(); } })]));
       if (!l.length) { box.appendChild(p(T('list_empty'))); box.appendChild(actions([btn('Najít materiál', find), btn('Poslat fotku nebo seznam', function () { showQuote('list'); }, 'pmj-btn-primary')])); return; }
       box.appendChild(h('ul', { class: 'pmj-rows' }, l.map(function (x, i) {
-        var q = h('input', { type: 'number', class: 'pmj-qty', min: '0.001', step: 'any', inputmode: 'decimal', value: String(x.q || 1), 'aria-label': 'Množství' + (x.un ? ' (' + x.un + ')' : '') + ': ' + x.n });
-        q.addEventListener('change', function () {
-          var v = parseFloat(String(q.value).replace(',', '.')); v = isFinite(v) && v > 0 ? Math.round(v * 1000) / 1000 : 1;
-          q.value = v; var cur = getList(); if (cur[i]) { cur[i].q = v; setList(cur); }
-        });
         var del = h('button', { type: 'button', class: 'pmj-del', 'aria-label': 'Odebrat: ' + x.n, text: '×' });
-        del.addEventListener('click', function () { var cur = getList(); cur.splice(i, 1); setList(cur); render(); var f = box.querySelector('.pmj-qty, .pmj-btn'); if (f) f.focus(); });
-        return h('li', { class: 'pmj-row' }, [
-          x.u ? h('a', { class: 'pmj-row-name', href: x.u, text: x.n }) : h('span', { class: 'pmj-row-name', text: (x.f ? 'Dotaz: ' : '') + x.n }), q, x.un ? h('span', { class: 'pmj-un', text: x.un }) : null, del]);
+        del.addEventListener('click', function () {
+          var cur = getList(), j = -1; cur.forEach(function (y, k) { if (j < 0 && sameItem(y, x)) j = k; });
+          if (j < 0) return;
+          undo = { x: cur.splice(j, 1)[0], i: j }; setList(cur); render();
+          var f = box.querySelector('.pmj-linkbtn, .pmj-qty, .pmj-btn'); if (f) f.focus();
+        });
+        return h('li', { class: 'pmj-row' + (x.q ? '' : ' pmj-row-noq') }, [
+          h('div', { class: 'pmj-row-name' }, [x.u ? h('a', { href: x.u, text: x.n }) : h('span', { text: x.n }),
+            h('span', { class: 'pmj-tag' + (x.f || !x.u ? ' pmj-tag-q' : ''), text: x.f || !x.u ? 'k upřesnění' : 'produkt' + (x.c ? ' ' + x.c : '') })]),
+          qtyBox(x), x.un ? h('span', { class: 'pmj-un', text: x.un }) : null, del]);
       })));
-      box.appendChild(actions([btn('Nacenit seznam', function () { showQuote('list'); }, 'pmj-btn-primary'), btn('Najít další', find), btn('Vložit další položky', importForm)]));
+      box.appendChild(p(l.length + (l.length === 1 ? ' položka' : l.length < 5 ? ' položky' : ' položek') + (miss ? ' · u ' + miss + ' chybí počet (prázdné pole) – doplňte ho, nebo ho upřesní obchodník.' : '.'), miss ? 'pmj-small pmj-warn' : 'pmj-small'));
+      box.appendChild(actions([btn('Nacenit seznam', function () { you('Nacenit seznam'); showQuote('list'); }, 'pmj-btn-primary'), btn('Najít další', function () { you('Najít další'); find(); }), btn('Vložit další položky', function () { you('Vložit další položky'); importForm(''); })]));
       var cp = h('button', { type: 'button', class: 'pmj-linkbtn', text: 'Kopírovat', onclick: function () { copyText(listText(getList())).then(function (ok) { cp.textContent = ok ? '✓ Zkopírováno' : 'Kopírování nejde'; }); track('jarda_list_export', { format: 'copy', list_count: getList().length }); } });
       box.appendChild(h('p', { class: 'pmj-small' }, ['Seznam si můžete uložit: ', h('button', { type: 'button', class: 'pmj-linkbtn', text: 'Stáhnout pro Excel (CSV)', onclick: exportCsv }), ' · ', cp]));
-    }
-    render();
-    say([box], 'pmj-bot', 'list');
+      }
+      render();
+      return say([box], 'pmj-bot', 'list');
+    });
   }
 
   /* CSV pro Excel (středník, UTF-8 s BOM) – jen položky seznamu, žádné kontaktní údaje */
   function exportCsv() {
     var l = getList(), esc = function (v) { v = String(v == null ? '' : v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    var rows = [['Množství', 'Jednotka', 'Název', 'Kód', 'Odkaz']].concat(l.map(function (x) { return [String(x.q || 1).replace('.', ','), x.un || '', (x.f ? 'Dotaz: ' : '') + x.n, x.c || '', x.u || '']; }));
+    var rows = [['Množství', 'Jednotka', 'Název', 'Kód', 'Odkaz']].concat(l.map(function (x) { return [x.q ? String(x.q).replace('.', ',') : '', x.un || '', (x.f ? 'Dotaz: ' : '') + x.n, x.c || '', x.u || '']; }));
     var csv = '\ufeff' + rows.map(function (r) { return r.map(esc).join(';'); }).join('\r\n');
     try {
       var a = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'promontaz-seznam-materialu.csv' });
@@ -497,7 +678,17 @@ window.__pmjApp = function (X) {
   }
   function nextUrl(id) { var u = new URL(location.href); u.searchParams.set('pmj_sent', id); u.hash = ''; return u.href; }
 
-  var files = [], submitting = false, formSend = null, forceSend = false;
+  /* Stav poptávky (3.2) – jeden objekt pro celou stránku, nezávislý na vykresleném formuláři:
+     files    vybrané přílohy (jen v paměti; mezi obrazovkami Jardy zůstávají, po přijetí se mažou),
+     submitting zámek odeslání (platí i pro znovu vykreslený formulář), send aktuální tlačítko,
+     submit   odeslání z aktuálního formuláře (záložní „Zkusit přesto“ nepoužije starý formulář), force bez kontroly služby.
+     Texty a kontakt jsou v sessionStorage (draft) – ukládají se hned při psaní, takže je nesmaže žádný přechod.
+     Životní cyklus: prázdná → rozepsaná → (kontrola) → odesílá se [zámek] → přijatá (vše smazáno)
+                     | nepřijatá / bez odpovědi / výpadek (zámek uvolněn, vše zůstává). */
+  var Q = { files: [], submitting: false, send: null, submit: null, force: false, started: false, restored: false, source: '' };
+  function draftGet() { return stJSON('sessionStorage', 'draft', {}) || {}; }
+  function draftText(d, list) { return d.t != null ? d.t : (list.length ? d.extra || '' : d.text || ''); } // d.text/extra = koncept z 3.1
+  function draftHas(d) { return !!(d && (draftText(d, getList()) || d.email || d.tel || d.note || (d.fn && d.fn.length))); }
   /* Odeslání skrytého formuláře mimo dosah automatického sledování formulářů gtag (form_start/form_submit do GA4 a Ads):
      gtag přepisuje HTMLFormElement.prototype.submit na stránce. Formulář zůstává na stránce (FormSubmit vyžaduje
      odeslání ze skutečné adresy webu), jen se odešle nepřepsanou nativní funkcí z prázdného iframe. Ověřeno živě 19. 11. 2026. */
@@ -517,12 +708,27 @@ window.__pmjApp = function (X) {
     return h('label', { class: 'pmj-field' }, [h('span', { class: 'pmj-label' }, [label, opt ? h('span', { class: 'pmj-opt', text: ' (nepovinné)' }) : null]), control, hint ? h('span', { class: 'pmj-hint', text: hint }) : null]);
   }
   function showQuote(source) {
+    var list0 = getList();
+    if (!Q.started) { Q.started = true; track('jarda_quote_start', { list_count: list0.length, quote_source: source || '' }); } // jednou za stránku
+    if (source) Q.source = source;
+    return screen('quote', 'Poptávka', quoteForm);
+  }
+  function itemLine(x) { return (x.q ? qtyLabel(x.q, x.un) + ' ' : '') + x.n + (x.c ? ' (' + x.c + ')' : ''); }
+  function quoteForm(rp) {
+    var source = Q.source;
     var Qc = A.quote || {}, maxFiles = Qc.max_files || 10, maxTotal = (Qc.max_total_mb || 10) * 1048576;
     var formats = Qc.formats || ['pdf', 'xlsx', 'csv', 'jpg', 'jpeg', 'png'];
-    var draft = stJSON('sessionStorage', 'draft', {}) || {};
-    var list = getList();
-    var ta = h('textarea', { rows: '5', class: 'pmj-input', placeholder: 'Např. 20× vrut 5x60, 3× OSB 18 mm…', 'aria-describedby': 'pmj-err' });
-    ta.value = list.length ? listText(list) + (draft.extra ? '\n' + draft.extra : '') : (draft.text || '');
+    var draft = draftGet();
+    var list = getList(), miss = noQty(list);
+    var ta = h('textarea', { rows: list.length ? '2' : '5', class: 'pmj-input', placeholder: list.length ? 'Např. další materiál, který v katalogu není' : 'Např. 20× vrut 5x60, 3× OSB 18 mm…', 'aria-describedby': 'pmj-err' });
+    ta.value = draftText(draft, list);
+    /* kontrola před odesláním přímo ve formuláři (bez dalšího kroku): co přesně se nacení */
+    var sum = list.length ? h('div', { class: 'pmj-qsum' }, [
+      h('p', { class: 'pmj-label', text: 'Seznam k nacenění (' + list.length + ')' }),
+      h('ul', { class: 'pmj-ul' }, list.slice(0, 25).map(function (x) { return h('li', { class: x.q ? null : 'pmj-warn', text: itemLine(x) + (x.q ? '' : ' – počet neuveden') }); })),
+      list.length > 25 ? p('… a dalších ' + (list.length - 25) + '.', 'pmj-small') : null,
+      miss ? p('U ' + miss + ' ' + (miss === 1 ? 'položky' : 'položek') + ' chybí počet. Doplňte ho v seznamu, nebo ho s vámi upřesní obchodník.', 'pmj-small pmj-warn') : null,
+      actions([btn('Upravit seznam', function () { you('Upravit seznam'); showList(); })])]) : null;
     var fin = h('input', { type: 'file', multiple: true, class: 'pmj-file', accept: formats.map(function (f) { return '.' + f; }).join(',') });
     var flist = h('ul', { class: 'pmj-files', 'aria-live': 'polite' });
     var email = h('input', { type: 'email', class: 'pmj-input', autocomplete: 'email', inputmode: 'email', maxlength: '160' });
@@ -534,8 +740,8 @@ window.__pmjApp = function (X) {
     var note = h('textarea', { rows: '2', class: 'pmj-input', placeholder: 'Např. firma, způsob dodání, poznámka k materiálu' });
     var hp = h('input', { type: 'text', tabindex: '-1', autocomplete: 'off' });
     var err = h('p', { class: 'pmj-err', role: 'alert', id: 'pmj-err' });
-    var send = h('button', { type: 'button', class: 'pmj-btn pmj-btn-primary pmj-send', text: 'Odeslat k nacenění' });
-    formSend = send;
+    var send = h('button', { type: 'button', class: 'pmj-btn pmj-btn-primary pmj-send', text: Q.submitting ? 'Odesílám…' : 'Odeslat k nacenění', disabled: Q.submitting });
+    Q.send = send;
     [['email', email], ['tel', tel], ['zip', zip], ['ico', ico], ['term', term], ['note', note]].forEach(function (x) { if (draft[x[0]]) x[1].value = draft[x[0]]; });
     var more = h('details', { class: 'pmj-more' }, [h('summary', { text: 'Firma, termín, poznámka' }),
       field('IČO', ico, 'Vyplňte, pokud chcete nabídku na firmu.', 1), field('Požadovaný termín', term, null, 1), field('Poznámka', note, null, 1)]);
@@ -544,7 +750,8 @@ window.__pmjApp = function (X) {
        z Jardy do GA4 i Google Ads. Do FormSubmitu se odesílá samostatný skrytý <form> přes .submit() (bez události submit). */
     var form = h('div', { class: 'pmj-form', role: 'form', 'aria-label': T('quote_title') || 'Poptávka k nacenění' }, [
       h('p', { class: 'pmj-title', text: T('quote_title') }), p(T('quote_short'), 'pmj-small'),
-      field('Seznam materiálu', ta, 'Název nebo kód a množství. Upravit můžete i tady.'),
+      sum,
+      list.length ? field('Další materiál nebo poznámka k seznamu', ta, null, 1) : field('Seznam materiálu', ta, 'Název nebo kód a množství.'),
       field('Přílohy', fin, 'Fotka, PDF, Excel (XLSX) nebo CSV. Nejvýše ' + maxFiles + ' souborů, dohromady ' + (Qc.max_total_mb || 10) + ' MB.', 1), flist,
       h('div', { class: 'pmj-grid' }, [field('E-mail', email), field('Telefon', tel)]),
       p('Vyplňte e-mail nebo telefon, ať se vám můžeme ozvat.', 'pmj-hint'),
@@ -555,14 +762,17 @@ window.__pmjApp = function (X) {
       h('p', { class: 'pmj-small' }, ['Údaje použijeme jen pro zpracování poptávky. Poptávku doručuje služba FormSubmit, která může krátce ověřit, že nejste robot. ',
         h('a', { href: L.privacy || '/podminky-ochrany-osobnich-udaju/', text: 'Ochrana osobních údajů' })])
     ]);
-    files = [];
+    var files = Q.files; // stejné pole po celou dobu – přílohy přežijí Zpět, Seznam i nové otevření poptávky
+    var lost = !files.length && draft.fn && draft.fn.length ? draft.fn : null;
     function renderFiles() {
       flist.textContent = '';
       files.forEach(function (f, i) {
         flist.appendChild(h('li', {}, [h('span', { text: f.name + ' (' + mb(f.size) + ')' }),
-          h('button', { type: 'button', class: 'pmj-del', 'aria-label': 'Odebrat soubor ' + f.name, text: '×', onclick: function () { files.splice(i, 1); renderFiles(); } })]));
+          h('button', { type: 'button', class: 'pmj-del', 'aria-label': 'Odebrat soubor ' + f.name, text: '×', onclick: function () { files.splice(i, 1); renderFiles(); saveDraft(); } })]));
       });
+      if (lost) flist.appendChild(h('li', { class: 'pmj-warn', text: 'Přílohy z předchozí stránky (' + lost.join(', ') + ') prosím vyberte znovu – prohlížeč je mezi stránkami neuchová.' }));
     }
+    renderFiles();
     fin.addEventListener('change', function () {
       var picked = Array.prototype.slice.call(fin.files || []), msgs = [];
       Promise.all(picked.map(function (f) {
@@ -579,19 +789,18 @@ window.__pmjApp = function (X) {
           files.push(f);
         });
         fin.value = '';
+        lost = null;
         renderFiles();
+        saveDraft();
         err.textContent = msgs.join(' ');
       });
     });
-    /* rozepsaná poptávka se ukládá jen do sessionStorage této karty a maže se po přijetí */
-    var saveT;
+    /* rozepsaná poptávka se ukládá hned (bez zpoždění – rychlý přechod nic neztratí) jen do sessionStorage této karty
+       a maže se po přijetí. text/extra = tvar konceptu z 3.1 (návrat na předchozí verzi nic neztratí). */
     function saveDraft() {
-      clearTimeout(saveT);
-      saveT = setTimeout(function () {
-        var listNow = listText(getList()), t = ta.value;
-        st('sessionStorage', 'draft', JSON.stringify({ text: t, extra: listNow && t.indexOf(listNow) === 0 ? t.slice(listNow.length).trim() : '',
-          email: email.value, tel: tel.value, zip: zip.value, ico: ico.value, term: term.value, note: note.value }));
-      }, 400);
+      var listNow = listText(getList()), t = ta.value;
+      st('sessionStorage', 'draft', JSON.stringify({ t: t, text: listNow ? listNow + (t.trim() ? '\n' + t : '') : t, extra: t,
+        email: email.value, tel: tel.value, zip: zip.value, ico: ico.value, term: term.value, note: note.value, fn: lost || files.map(function (f) { return f.name; }) }));
     }
     form.addEventListener('input', saveDraft);
     form.addEventListener('change', saveDraft);
@@ -599,9 +808,10 @@ window.__pmjApp = function (X) {
     send.addEventListener('click', doSubmit);
     form.addEventListener('keydown', function (e) { var t = e.target; if (e.key === 'Enter' && t.tagName === 'INPUT' && t.type !== 'file') { e.preventDefault(); doSubmit(); } });
     function doSubmit() {
-      if (submitting) return;
+      if (Q.submitting) return;
+      var listNow = getList(), material = [listText(listNow), ta.value.trim()].filter(Boolean).join('\n');
       var em = email.value.trim(), ph = tel.value.trim(), z = zip.value.replace(/\s/g, ''), ic = ico.value.replace(/\s/g, ''), bad = null, msg = '';
-      if (!ta.value.trim() && !files.length) { msg = 'Napište, co nacenit, nebo přiložte fotku či seznam.'; bad = ta; }
+      if (!material && !files.length) { msg = 'Napište, co nacenit, nebo přiložte fotku či seznam.'; bad = ta; }
       else if (!em && !ph) { msg = 'Vyplňte e-mail nebo telefon.'; bad = email; }
       else if (em && !/^[^\s@]{1,64}@[^\s@]{1,100}\.[a-z]{2,24}$/i.test(em)) { msg = 'Zkontrolujte e-mail (např. jmeno@firma.cz).'; bad = email; }
       else if (ph && (ph.replace(/\D/g, '').length < 9 || !/^\+?[0-9 ()-]+$/.test(ph))) { msg = 'Zkontrolujte telefon (alespoň 9 číslic).'; bad = tel; }
@@ -615,13 +825,13 @@ window.__pmjApp = function (X) {
       if (msg) { if (bad) bad.focus(); return; }
 
       /* Odesílá se skrytý formulář; viditelný zůstává beze změny (návrat tlačítkem Zpět nic neztratí). */
-      var id = leadId(), n = getList().length, F = h('form', { method: 'post', action: C.formsubmit_endpoint, enctype: 'multipart/form-data', 'accept-charset': 'UTF-8', hidden: true });
+      var id = leadId(), n = listNow.length, F = h('form', { method: 'post', action: C.formsubmit_endpoint, enctype: 'multipart/form-data', 'accept-charset': 'UTF-8', hidden: true });
       function hid(name, val) { F.appendChild(h('input', { type: 'hidden', name: name, value: val })); }
       hid('_subject', (X.test ? 'TEST – ' : '') + 'Poptávka ' + id + ' – widget Jarda' + (z ? ' – PSČ ' + z : '') + (files.length ? ' – ' + files.length + ' příl.' : ''));
       hid('_template', 'table'); hid('_next', nextUrl(id)); hid('_honey', hp.value);
       if (em) { hid('email', em); hid('_replyto', em); }
       hid('Číslo poptávky', id); hid('Zdroj', 'Widget Jarda ' + C.__version); hid('Stránka', location.href);
-      hid('Seznam materiálu', ta.value.trim() || '—'); hid('Počet položek ze seznamu', String(n));
+      hid('Seznam materiálu', material || '—'); hid('Počet položek ze seznamu', String(n));
       hid('Telefon', ph || '—'); hid('PSČ dodání', z || '—'); hid('IČO', ic || '—');
       hid('Požadovaný termín', dl[term.value] || '—'); hid('Poznámka', note.value.trim() || '—');
       hid('Přílohy', files.length ? files.map(function (f) { return f.name + ' (' + mb(f.size) + ')'; }).join(', ') : 'žádné');
@@ -634,7 +844,7 @@ window.__pmjApp = function (X) {
       });
       if (okFiles !== files.length) { err.textContent = 'Přílohy se nepodařilo připojit. Zkuste jiný prohlížeč, nebo je pošlete na ' + contact().email + '.'; return; }
       saveDraft();
-      submitting = true; send.disabled = true; send.textContent = 'Odesílám…';
+      Q.submitting = true; send.disabled = true; send.textContent = 'Odesílám…';
       /* Odeslání na AJAX endpoint FormSubmitu (formsubmit.co/ajax/…): odpověď {"success":"true"} je jediné potvrzení
          přijetí. Zákazník zůstává na promontaz.cz (bez reCAPTCHA stránky a bez závislosti na přesměrování _next). */
       var go = function () {
@@ -671,28 +881,29 @@ window.__pmjApp = function (X) {
             fallbackBlock(id, ft.text, names, 'no_response', null, null, true);
           });
       };
-      if (forceSend || C.dry_run) { forceSend = false; go(); return; }
+      if (Q.force || C.dry_run) { Q.force = false; go(); return; }
       /* Výpadek FormSubmitu (522) se pozná dřív, než zákazník opustí stránku → záložní e-mail místo chybové stránky */
       probe(C.formsubmit_endpoint, (A.quote && A.quote.probe_timeout_ms) || 6000).then(function (ok) {
         if (ok) return go();
-        submitting = false; send.disabled = false; send.textContent = 'Odeslat k nacenění';
+        Q.submitting = false; if (Q.send) { Q.send.disabled = false; Q.send.textContent = 'Odeslat k nacenění'; }
         var ft = formText(F);
-        fallbackBlock(id, ft.text, files.map(function (f) { return f.name; }), 'service_down', function () { forceSend = true; doSubmit(); });
+        fallbackBlock(id, ft.text, files.map(function (f) { return f.name; }), 'service_down', function () { Q.force = true; if (Q.submit) Q.submit(); });
       });
     }
-    say([form], 'pmj-bot', 'quote');
-    track('jarda_quote_start', { list_count: list.length, quote_source: source || '' });
-    if (draft.text || draft.email || draft.tel) say([p(T('draft_restored'), 'pmj-small')], 'pmj-bot', 'draftnote');
-    (list.length ? (email.value || tel.value ? send : email) : ta).focus();
+    Q.submit = doSubmit;
+    if (!Q.restored && draftHas(draft)) { Q.restored = true; form.insertBefore(p(T('draft_restored'), 'pmj-small'), form.children[2]); }
+    var m = say([form], 'pmj-bot', 'quote');
+    if (!rp) (list.length ? (email.value || tel.value ? send : email) : ta).focus();
+    return m;
   }
   /* návrat tlačítkem Zpět (bfcache, hlavně iOS Safari): odblokovat odeslání */
   /* Návrat ze stránky odesílací služby tlačítkem Zpět (bfcache, iOS Safari i při chybě služby, např. 522):
      odblokovat tlačítko a hned ukázat, že se poptávka možná neodeslala (seznam zůstává). */
   var submitAt = 0, LOADED = Date.now();
   function unlock(note) {
-    if (!submitting) return;
-    submitting = false;
-    if (formSend) { formSend.disabled = false; formSend.textContent = 'Odeslat k nacenění'; }
+    if (!Q.submitting) return;
+    Q.submitting = false;
+    if (Q.send) { Q.send.disabled = false; Q.send.textContent = 'Odeslat k nacenění'; }
     if (note) checkUnconfirmed(true);
   }
   window.addEventListener('pageshow', function (e) { if (e.persisted) unlock(true); });
@@ -713,8 +924,9 @@ window.__pmjApp = function (X) {
     st('sessionStorage', 'sent', JSON.stringify(sent.slice(-20)));
     st('sessionStorage', 'pending', null); st('sessionStorage', 'draft', null);
     setList([]);
-    submitting = false;
+    Q.submitting = false; Q.files.length = 0; Q.restored = false; lastWork = null; importText = '';
     remove(blocks.quote); remove(blocks.fallback); remove(blocks.unconf);
+    if (NAV.length > 1) { NAV.length = 1; updNav(); } // odeslaná poptávka se nedá „vrátit“ – Zpět vede jen do nabídky
     track('jarda_quote_accepted', { lead_id: id, items_count: n, attachments_count: f });
     try { (window.dataLayer = window.dataLayer || []).push({ event: 'jarda_quote_sent', lead_id: id }); } catch (e) {} // kompatibilita s v2 (jen dataLayer)
     if (reopen) open('quote_accepted', true);
@@ -743,9 +955,8 @@ window.__pmjApp = function (X) {
     say(kids, 'pmj-bot', 'fallback');
   }
   function draftSummary() {
-    var d = stJSON('sessionStorage', 'draft', {}) || {}, l = [];
-    var list = listText(getList()); if (list) l.push('Seznam materiálu:\n' + list); else if (d.text) l.push('Seznam materiálu:\n' + d.text);
-    if (d.extra) l.push(d.extra);
+    var d = draftGet(), l = [], gl = getList(), t = draftText(d, gl);
+    var list = [listText(gl), t].filter(Boolean).join('\n'); if (list) l.push('Seznam materiálu:\n' + list);
     [['tel', 'Telefon'], ['email', 'E-mail'], ['zip', 'PSČ dodání'], ['ico', 'IČO'], ['note', 'Poznámka']].forEach(function (x) { if (d[x[0]]) l.push(x[1] + ': ' + d[x[0]]); });
     return l.join('\n');
   }
@@ -764,13 +975,14 @@ window.__pmjApp = function (X) {
   /* ---------- odpovědi ---------- */
   function calc() {
     var list = (A.calculators || []).slice(0, 12);
-    say([p(T('calc')), list.length ? h('ul', { class: 'pmj-ul pmj-calcs' }, list.map(function (c) {
+    screen('calc', 'Kalkulačky', function () { return say([p(T('calc')), list.length ? h('ul', { class: 'pmj-ul pmj-calcs' }, list.map(function (c) {
       return h('li', {}, [h('a', { href: c.u, text: c.t, onclick: function () { track('jarda_calc_click', { calc: c.id || c.u, from: 'chip' }); } })]);
-    })) : null, actions([link('Všechny kalkulačky', L.kalkulacky || '/kalkulacky/', 'pmj-btn-primary')])]);
+    })) : null, actions([link('Všechny kalkulačky', L.kalkulacky || '/kalkulacky/', 'pmj-btn-primary')])], 'pmj-bot', 'calc'); });
   }
   /* Doprava: jen ověřená pravidla (config.app.json → shipping, opsáno z /doprava-platba/) a hodnota dopravy zdarma
      přímo ze Shoptetu (cartInfo.freeShippingFrom), když ji stránka nabízí. Žádné termíny ani slib společné expedice. */
-  function shipping() {
+  function shipping() { screen('shipping', 'Doprava a platba', shippingView); }
+  function shippingView() {
     var f = C.facts || {}, S = A.shipping || {}, kids = [p(T('shipping_title'), 'pmj-title')], li = [];
     if (typeof f.min_order_czk === 'number') li.push('Minimální objednávka je ' + kc(f.min_order_czk) + ' (cena zboží s DPH, bez dopravy).');
     if (S.rules && S.rules.length) li = li.concat(S.rules);
@@ -781,21 +993,25 @@ window.__pmjApp = function (X) {
     if (S.note) li.push(S.note);
     if (f.payment) li.push(f.payment);
     kids.push(h('ul', { class: 'pmj-ul' }, li.map(function (t) { return h('li', { text: t }); })));
-    kids.push(actions([link('Vše o dopravě a platbě', L.doprava || '/doprava-platba/', 'pmj-btn-primary'), btn('Doprava větší objednávky', function () { showQuote('shipping'); }), btn('Zeptat se obchodníka', human)]));
-    say(kids);
+    kids.push(actions([link('Vše o dopravě a platbě', L.doprava || '/doprava-platba/', 'pmj-btn-primary'), btn('Doprava větší objednávky', function () { you('Doprava větší objednávky'); showQuote('shipping'); }), btn('Zeptat se obchodníka', function () { you('Zeptat se obchodníka'); human(); })]));
+    return say(kids, 'pmj-bot', 'shipping');
   }
   function payment() {
     var f = C.facts;
-    say([f && f.payment ? p(f.payment) : null, actions([link('Doprava a platba', L.doprava || '/doprava-platba/', 'pmj-btn-primary'), btn('Zeptat se obchodníka', human)])]);
+    screen('payment', 'Platba', function () { return say([f && f.payment ? p(f.payment) : null, actions([link('Doprava a platba', L.doprava || '/doprava-platba/', 'pmj-btn-primary'), btn('Zeptat se obchodníka', human)])], 'pmj-bot', 'payment'); });
   }
   function orderStatus() {
-    say([p(T('order_status')), actions([link('Moje objednávky (přihlášení)', contact().orders, 'pmj-btn-primary')]), contactButtons('Dotaz k objednávce č. ', 'order')]);
+    screen('order', 'Moje objednávka', function () { return say([p(T('order_status')), actions([link('Moje objednávky (přihlášení)', contact().orders, 'pmj-btn-primary')]), contactButtons('Dotaz k objednávce č. ', 'order')], 'pmj-bot', 'order'); });
   }
-  function invoice() { say([p(T('invoice')), contactButtons('Dotaz k faktuře, objednávka č. ', 'invoice')]); }
+  function invoice() { screen('invoice', 'Faktura', function () { return say([p(T('invoice')), contactButtons('Dotaz k faktuře, objednávka č. ', 'invoice')], 'pmj-bot', 'invoice'); }); }
+  /* Poptávka ≠ objednávka: nacenění je nezávazné (odpoví obchodník), objednávka se dokončuje v košíku e-shopu. */
   function b2b() {
-    say([p(T('b2b')), actions([btn('Otevřít poptávku', function () { showQuote('b2b'); }, 'pmj-btn-primary'), btn('Najít materiál', find)])]);
+    screen('b2b', 'Nacenění pro firmu', function () {
+      return say([p(T('b2b')), p(T('quote_vs_order') || 'Poptávka je nezávazná – nabídku pošle obchodník. Běžný nákup dokončíte rovnou v košíku e-shopu.', 'pmj-small'),
+        actions([btn('Otevřít poptávku', function () { you('Otevřít poptávku'); showQuote('b2b'); }, 'pmj-btn-primary'), btn('Najít materiál', function () { you('Najít materiál'); find(); })])], 'pmj-bot', 'b2b');
+    });
   }
-  function human() { say([p(T('contact') || T('human')), contactButtons(null, 'human')]); }
+  function human() { screen('human', 'Obchodník', function () { return say([p(T('contact') || T('human')), contactButtons(null, 'human')], 'pmj-bot', 'human'); }); }
 
   var HANDLERS = { doprava: shipping, platba: payment, objednavka: orderStatus, faktura: invoice, b2b: b2b, clovek: human };
   var LABELS = { doprava: 'Doprava', platba: 'Platba', objednavka: 'Moje objednávka', faktura: 'Faktura k objednávce', b2b: 'Nacenění pro firmu', clovek: 'Obchodník' };
@@ -811,11 +1027,15 @@ window.__pmjApp = function (X) {
     if (!q) return;
     input.value = '';
     you(q);
+    runQuery(q);
+  }
+  /* Volný text: záměr (doprava, objednávka…) nebo hledání. Funguje i bez nabídky (přímé hledání). */
+  function runQuery(q) {
     cfgP.then(function () {
       var r = classify(q, RULES);
       if (r.intent) track('jarda_intent', { intent: r.intent, mode: r.mode });
       if (r.mode === 'direct' && HANDLERS[r.intent]) HANDLERS[r.intent]();
-      else if (r.mode === 'clarify') say([p(T('clarify')), intentChips(r.alt, q)]);
+      else if (r.mode === 'clarify') screen('clarify:' + q.toLowerCase(), 'Upřesnění', function () { return say([p(T('clarify')), intentChips(r.alt, q)], 'pmj-bot', 'clarify'); }, true);
       else if (r.mode === 'mixed') {
         var m = parseQty(q);
         doSearch(m.q ? m.query : q, null, function () { say([p(T('mixed'), 'pmj-small'), intentChips([r.intent], '')], 'pmj-bot', 'mixed'); }, m.q ? m : null);
@@ -826,7 +1046,10 @@ window.__pmjApp = function (X) {
   /* ---------- panel ---------- */
   function build() {
     input = h('input', { type: 'text', class: 'pmj-input pmj-q', placeholder: T('input_placeholder'), 'aria-label': 'Zpráva pro poradce', autocomplete: 'off', enterkeyhint: 'send', maxlength: '120' });
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) onText(e); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.isComposing) onText(e);
+      else if (e.key === 'ArrowUp' && !input.value && (lastQuery || st('sessionStorage', 'lastq'))) { e.preventDefault(); editQuery(); } // šipka nahoru = poslední dotaz
+    });
     // katalog (~1 MB gzip) se začne stahovat, jakmile zákazník začne psát – ne při otevření panelu (kdo jen klikne na čip, nestahuje)
     input.addEventListener('input', function pre() { input.removeEventListener('input', pre); getIndex().catch(function () {}); });
     input.addEventListener('paste', function (e) {
@@ -844,6 +1067,9 @@ window.__pmjApp = function (X) {
         h('button', { type: 'button', class: 'pmj-x', 'aria-label': 'Zavřít poradce', text: '×', onclick: close })
       ]),
       log,
+      navEl = h('nav', { class: 'pmj-nav', 'aria-label': 'Navigace v poradci', hidden: true }, [
+        backEl = h('button', { type: 'button', class: 'pmj-navb', onclick: back }),
+        homeEl = h('button', { type: 'button', class: 'pmj-navb pmj-navh', text: 'Hlavní nabídka', onclick: home })]),
       h('div', { class: 'pmj-bar', role: 'search' }, [input, h('button', { type: 'button', class: 'pmj-go', 'aria-label': 'Odeslat', text: '➜', onclick: onText })]),
       C.auto_open && C.auto_open.enabled ? h('div', { class: 'pmj-foot' }, [h('button', { type: 'button', class: 'pmj-linkbtn', text: T('no_auto') || 'Neotevírat automaticky',
         onclick: function (e) { st('localStorage', 'noauto', '1'); track('jarda_noauto', {}); e.target.disabled = true; e.target.textContent = 'Automatické otevírání vypnuto'; } })]) : null
@@ -852,12 +1078,26 @@ window.__pmjApp = function (X) {
     document.addEventListener('keydown', function (e) { if ((e.key === 'Escape' || e.key === 'Esc') && isOpen) { e.stopPropagation(); close(); } });
   }
 
+  /* iOS Safari: otevřená klávesnice zmenší jen viditelnou část (visualViewport), panel přes celou obrazovku by pole
+     a tlačítka schoval pod klávesnici. Na mobilu proto panel sleduje viditelnou oblast. */
+  var VV = window.visualViewport, MQ = window.matchMedia ? matchMedia('(max-width:599px)') : null;
+  function fitVV() {
+    var on = isOpen && VV && MQ && MQ.matches;
+    root.style.top = on ? VV.offsetTop + 'px' : '';
+    root.style.height = on ? VV.height + 'px' : '';
+    root.style.bottom = on ? 'auto' : '';
+    if (on && document.activeElement && log.contains(document.activeElement) && document.activeElement.scrollIntoView) {
+      try { document.activeElement.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    }
+  }
+  if (VV) { VV.addEventListener('resize', fitVV); VV.addEventListener('scroll', fitVV); }
   function open(source, quiet) {
     X.hideTeaser();
     if (isOpen) return;
     isOpen = true;
     lastFocus = document.activeElement;
     panel.hidden = false;
+    fitVV();
     root.classList.add('pmj-open');
     document.documentElement.classList.add('pmj-lock');
     fab.setAttribute('aria-expanded', 'true');
@@ -871,6 +1111,7 @@ window.__pmjApp = function (X) {
     if (!isOpen) return;
     isOpen = false;
     panel.hidden = true;
+    fitVV();
     root.classList.remove('pmj-open');
     document.documentElement.classList.remove('pmj-lock');
     fab.setAttribute('aria-expanded', 'false');

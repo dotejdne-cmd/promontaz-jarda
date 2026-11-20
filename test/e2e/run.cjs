@@ -35,7 +35,7 @@ const VER = require('../../package.json').version;
 const STABLE = String((require('../../package.json').jarda || {}).stable || '2'), DEF = STABLE === '2' ? 'v2' : STABLE; // výchozí verze kanálu
 async function step(name, fn) {
   try { await fn(); results.push('✓ ' + name); }
-  catch (e) { failed++; results.push('✗ ' + name + '\n    ' + String(e.message).split('\n').slice(0, 4).join('\n    ')); }
+  catch (e) { failed++; results.push('✗ ' + name + '\n    ' + String(e.message).split("\n").slice(0, +(process.env.ELINES || 4)).join('\n    ')); }
 }
 
 async function ctxSetup(ctx, errs) {
@@ -101,7 +101,7 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
   await step('hledání: karta s cenou s DPH, kódem, „k nacenění“ a „Do košíku“', async () => {
     await ask(pg, 'turbo šroub 7,5 x 92'); await pg.waitForSelector('.pmj-card');
     const t = await pg.$eval('.pmj-cards .pmj-card', e => e.innerText);
-    assert.match(t, /Turbo šroub/); assert.match(t, /Kč\s+s DPH/); assert.match(t, /Kód: 8061BD/);
+    assert.match(t, /Turbo šroub/); assert.match(t, /319 Kč \/ bal \(100 ks\)\s+s DPH/); assert.match(t, /Kód: 8061BD/);
     assert.ok(await pg.$('.pmj-cards .pmj-card:first-child button:has-text("Do košíku")'));
   });
   await step('košík: nejdřív ověření balení na stránce produktu, vložení přes Shoptet API, potvrzení až po ShoptetCartUpdated', async () => {
@@ -183,7 +183,8 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
   });
   await step('poptávka: validace kontaktu, PSČ, IČO a příloh (ZIP, podvržený XLSX)', async () => {
     await pg.click('.pmj-list .pmj-btn-primary'); await pg.waitForSelector('.pmj-form');
-    assert.match(await pg.inputValue('.pmj-form textarea'), /30× Kramle tesařská 10x200 \(kód HR_10075\)/);
+    assert.match(await pg.textContent('.pmj-form .pmj-qsum'), /30× Kramle tesařská 10x200 \(HR_10075\)/, 'kontrola seznamu přímo ve formuláři');
+    assert.equal(await pg.inputValue('.pmj-form textarea'), '', 'pole je jen pro doplnění, seznam se do něj neopisuje');
     await pg.click('.pmj-send'); assert.match(await pg.textContent('.pmj-err'), /e-mail nebo telefon/);
     await pg.fill('.pmj-form input[type=tel]', '722 111 222');
     await pg.fill('.pmj-form input[autocomplete=postal-code]', '1100'); await pg.click('.pmj-send');
@@ -392,7 +393,7 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     await pg.goto(B + '?page=cart'); await openJarda(pg);
     assert.match(await lastBot(pg), /Do minimální objednávky chybí 346 Kč/);
     await pg.click('.pmj-chip:has-text("Poslat košík k nacenění")'); await pg.waitForSelector('.pmj-form');
-    assert.match(await pg.inputValue('.pmj-form textarea'), /2× Kramle tesařská 10x200 \(kód HR_10075\)/);
+    assert.match(await pg.textContent('.pmj-form .pmj-qsum'), /2× Kramle tesařská 10x200 \(HR_10075\)/);
   });
   await step('košík: bez automatické bubliny', async () => {
     await pg.evaluate(() => sessionStorage.clear());
@@ -485,8 +486,12 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.deepEqual([ev.lines, ev.matched, ev.ambiguous, ev.unmatched, ev.missing_qty], [5, 2, 1, 2, 2]);
     await p3.click('button:has-text("Přidat vše k nacenění (5)")');
     const l = await p3.evaluate(() => JSON.parse(localStorage.pmj2_list));
-    assert.deepEqual(l.map(x => [x.q, x.un, x.c, x.f]), [[250, 'ks', '8061BD', 0], [50, 'm', 'EL_KAB_17022', 0], [1, '', '', 1], [1, '', '', 1], [1, '', '', 1]]);
-    assert.match(await p3.$eval('.pmj-form textarea', e => e.value), /^250 ks Den Braven Turbo šroub.*\n50 m Kabel CYKY-J 3x2,5 \(C\)[^\n]*\n1× Dotaz: kabel/);
+    // 3.2: nezadaný počet zůstává neuvedený (q = 0), nikdy 1 ks; u textové položky se počet z řádku převezme zvlášť
+    assert.deepEqual(l.map(x => [x.q, x.un, x.c, x.f, x.n]).slice(2), [[0, '', '', 1, 'kabel'], [0, '', '', 1, 'kramle tesařská 10x200'], [20, 'ks', '', 1, 'zlatý hřebík 3x50']]);
+    assert.deepEqual(l.map(x => [x.q, x.un, x.c, x.f]).slice(0, 2), [[250, 'ks', '8061BD', 0], [50, 'm', 'EL_KAB_17022', 0]]);
+    const sum = await p3.$eval('.pmj-form .pmj-qsum', e => e.innerText);
+    assert.match(sum, /250 ks Den Braven Turbo šroub[^\n]*\n50 m Kabel CYKY-J 3x2,5 \(C\)[^\n]*\nkabel – počet neuveden/);
+    assert.match(sum, /U 2 položek chybí počet/);
   });
   await step('seznam: export do CSV pro Excel (UTF-8, středníky) a vložení víceřádkového textu do pole', async () => {
     await p3.click('.pmj-listbtn');
@@ -509,7 +514,7 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     assert.equal(n, 2);
     await p3.waitForSelector('.pmj-list .pmj-row');
     const l = await p3.evaluate(() => JSON.parse(localStorage.pmj2_list));
-    assert.deepEqual(l, [{ n: 'OSB 2500/1250/18 RH', c: 'J_00076', u: 'https://www.promontaz.cz/v/', q: 14, un: 'ks', f: 0 }, { n: '<img src=x onerror=alert(1)>', c: '', u: '', q: 1, un: '', f: 0 }]);
+    assert.deepEqual(l, [{ n: 'OSB 2500/1250/18 RH', c: 'J_00076', u: 'https://www.promontaz.cz/v/', q: 14, un: 'ks', f: 0 }, { n: '<img src=x onerror=alert(1)>', c: '', u: '', q: 0, un: '', f: 0 }]); // neplatný počet = neuveden (3.2), ne 1 ks
     assert.equal(await p3.$$eval('.pmj-list img', a => a.length), 0, 'název se vkládá jako text');
     assert.equal(await p3.textContent('.pmj-badge'), '2');
     const ev = await p3.evaluate(() => dataLayer.filter(o => o.event === 'jarda_api_add').pop());
@@ -547,6 +552,221 @@ async function openJarda(pg) { await pg.waitForSelector('.pmj-fab'); await pg.cl
     const fs16 = await mp.$eval('.pmj-q', e => parseFloat(getComputedStyle(e).fontSize));
     assert.ok(fs16 >= 16, 'pole musí mít ≥16 px kvůli zoomu v iOS');
     if (process.env.SHOTS) await mp.screenshot({ path: process.env.SHOTS + '/e2e-mobile.png' });
+  });
+  /* ---------- 3.2: navigace bez slepých uliček, stav poptávky, duplicity ---------- */
+  const c4 = await br.newContext({ viewport: { width: 1280, height: 860 } }); await ctxSetup(c4, errs);
+  const p4 = await c4.newPage();
+  const navTxt = () => p4.evaluate(() => { const n = document.querySelector('.pmj-nav'); return n.hidden ? null : [...n.querySelectorAll('button')].filter(b => !b.hidden).map(b => b.textContent); });
+  const cnt = async name => (await p4.evaluate(() => dataLayer.filter(o => o && o.event).map(o => o.event))).filter(e => e === name).length;
+  await step('3.2 přímé hledání bez nabídky; karta s jednotkou z indexu („319 Kč / bal (100 ks)“)', async () => {
+    await p4.goto(B + '?page=category'); await openJarda(p4);
+    assert.equal(await navTxt(), null, 'v nabídce žádná navigace');
+    await p4.fill('.pmj-q', 'turbo šroub 7,5x92'); await p4.press('.pmj-q', 'Enter');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-card');
+    assert.match(await p4.$eval('.pmj-bot:last-child .pmj-card', e => e.innerText), /319 Kč \/ bal \(100 ks\)\s*s DPH/);
+    assert.deepEqual(await navTxt(), ['← Změnit volbu']);
+  });
+  await step('3.2 hledání → výsledky → produkt → Zpět na výsledky → Zpět → nabídka (nic se znovu neměří ani nevkládá)', async () => {
+    await p4.click('.pmj-bot:last-child .pmj-card:first-child button:has-text("Do košíku")');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-buy .pmj-qty');
+    assert.deepEqual(await navTxt(), ['← Výsledky „turbo šroub 7,5x92“', 'Hlavní nabídka']);
+    const [s0, v0] = [await cnt('jarda_search'), await cnt('jarda_cart_verify')];
+    await p4.click('.pmj-navb >> nth=0');
+    await p4.waitForSelector('.pmj-bot:last-child:has-text("našel") .pmj-cards');
+    assert.match(await p4.evaluate(() => [...document.querySelectorAll('.pmj-you')].pop().textContent), /Zpět: Výsledky/);
+    assert.deepEqual(await navTxt(), ['← Změnit volbu']);
+    assert.equal(await p4.$$eval('.pmj-bot', a => a.filter(m => /našel/.test(m.innerText)).length), 1, 'výsledky jsou v konverzaci jednou (přesunuté dolů), ne zdvojené');
+    await p4.click('.pmj-navb >> nth=0');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-chip');
+    assert.equal(await navTxt(), null);
+    assert.deepEqual([await cnt('jarda_search'), await cnt('jarda_cart_verify')], [s0, v0], 'Zpět nic neměří znovu');
+    assert.ok(await p4.evaluate(() => dataLayer.filter(o => o.event === 'jarda_nav').every(o => Object.keys(o).every(k => ['event', 'nav', 'from', 'to', 'jarda_version'].includes(k)))), 'jarda_nav bez osobních údajů');
+    assert.equal(await p4.evaluate(() => window.__demoCart), undefined);
+  });
+  await step('3.2 doprava → Změnit volbu → nabídka; nejasný dotaz → volba → Změnit volbu vrátí volby', async () => {
+    await p4.click('.pmj-chip:has-text("Doprava a platba")'); await p4.waitForSelector('.pmj-bot:last-child:has-text("143,10")');
+    assert.deepEqual(await navTxt(), ['← Změnit volbu']);
+    await p4.click('.pmj-navb >> nth=0'); await p4.waitForSelector('.pmj-bot:last-child .pmj-chip:has-text("Najít materiál")');
+    await p4.fill('.pmj-q', 'faktura objednávka'); await p4.press('.pmj-q', 'Enter');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-chip:has-text("Faktura k objednávce")');
+    await p4.click('.pmj-bot:last-child .pmj-chip:has-text("Faktura k objednávce")');
+    await p4.waitForSelector('.pmj-bot:last-child:has-text("číslo objednávky")');
+    assert.deepEqual(await navTxt(), ['← Změnit volbu', 'Hlavní nabídka']);
+    await p4.click('.pmj-navb >> nth=0');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-chip:has-text("Moje objednávka")');
+    assert.match(await lastBot(p4), /Upřesněte/);
+  });
+  await step('3.2 množství: „250 ks …“ → k nacenění → úprava počtu bez nového hledání; Zpět na výsledky ukáže „✓ V seznamu“', async () => {
+    await p4.fill('.pmj-q', '250 ks turbo šroub 7,5x92'); await p4.press('.pmj-q', 'Enter');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-card');
+    const s0 = await cnt('jarda_search');
+    await p4.click('.pmj-bot:last-child .pmj-card:first-child button:has-text("+ k nacenění")');
+    await p4.waitForSelector('.pmj-added .pmj-qty');
+    assert.equal(await p4.inputValue('.pmj-added .pmj-qty'), '250');
+    await p4.fill('.pmj-added .pmj-qty', '300'); await p4.press('.pmj-added .pmj-qty', 'Tab');
+    let l = await p4.evaluate(() => JSON.parse(localStorage.pmj2_list));
+    assert.deepEqual(l.map(x => [x.q, x.un, x.c]), [[300, 'ks', '8061BD']], 'požadované množství a jednotka zůstávají (300 ks), převod na balení až v košíku');
+    assert.equal(await cnt('jarda_search'), s0);
+    // znovu kliknout nejde: položka je v seznamu (žádná duplicita)
+    assert.equal(await p4.$eval('.pmj-bot:has-text("Pro 250 ks") .pmj-card:first-child button.pmj-btn-primary', b => [b.disabled, b.textContent].join()), 'true,✓ V seznamu');
+    // hledání bez množství a „+ k nacenění“ → počet zůstane neuvedený
+    await p4.fill('.pmj-q', 'turbo šroub 7,5x72'); await p4.press('.pmj-q', 'Enter');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-card');
+    await p4.click('.pmj-bot:last-child .pmj-card:first-child button:has-text("+ k nacenění")');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-added');
+    assert.equal(await p4.inputValue('.pmj-bot:last-child .pmj-added .pmj-qty'), '');
+    assert.match(await lastBot(p4), /Doplňte prosím počet/);
+    l = await p4.evaluate(() => JSON.parse(localStorage.pmj2_list));
+    assert.equal(l[1].q, 0, 'bez množství žádný falešný 1 ks');
+  });
+  await step('3.2 upravit poslední dotaz (tlačítko i šipka nahoru) bez nového hledání', async () => {
+    await p4.click('.pmj-bot:has(.pmj-cards) >> nth=-1 >> button:has-text("Upravit hledání")').catch(async () => p4.click('button:has-text("Upravit hledání") >> nth=-1'));
+    assert.equal(await p4.inputValue('.pmj-q'), 'turbo šroub 7,5x72');
+    assert.ok(await p4.evaluate(() => document.activeElement.classList.contains('pmj-q')));
+    await p4.fill('.pmj-q', ''); await p4.press('.pmj-q', 'ArrowUp');
+    assert.equal(await p4.inputValue('.pmj-q'), 'turbo šroub 7,5x72');
+    await p4.fill('.pmj-q', '');
+  });
+  await step('3.2 seznam: neuvedený počet označen, změna počtu, odebrání a vrácení položky', async () => {
+    await p4.click('.pmj-listbtn'); await p4.waitForSelector('.pmj-list .pmj-row');
+    assert.equal(await p4.$$eval('.pmj-list .pmj-row-noq', a => a.length), 1);
+    assert.match(await p4.$eval('.pmj-list', e => e.innerText), /2 položky · u 1 chybí počet/);
+    assert.deepEqual(await p4.$$eval('.pmj-list .pmj-tag', a => a.map(x => x.textContent)), ['produkt 8061BD', 'produkt 8060BD']);
+    await p4.fill('.pmj-list .pmj-row:nth-child(2) .pmj-qty', '4'); await p4.press('.pmj-list .pmj-row:nth-child(2) .pmj-qty', 'Tab');
+    assert.equal(await p4.$$eval('.pmj-list .pmj-row-noq', a => a.length), 0);
+    await p4.click('.pmj-list .pmj-row:nth-child(2) .pmj-del');
+    assert.equal((await p4.evaluate(() => JSON.parse(localStorage.pmj2_list))).length, 1);
+    await p4.click('.pmj-list button:has-text("Vrátit")');
+    assert.deepEqual((await p4.evaluate(() => JSON.parse(localStorage.pmj2_list))).map(x => x.q), [300, 4]);
+  });
+  await step('3.2 seznam → poptávka → Zpět → úprava seznamu → poptávka: text, kontakt i přílohy zůstávají, formulář jen jednou', async () => {
+    await p4.click('.pmj-list button:has-text("Nacenit seznam")'); await p4.waitForSelector('.pmj-form');
+    assert.equal(await cnt('jarda_quote_start'), 1);
+    await p4.fill('.pmj-form textarea', 'ještě 2 role pásky');
+    await p4.fill('.pmj-form input[type=email]', 'test@example.com');
+    await p4.setInputFiles('.pmj-form input[type=file]', [{ name: 'vykres.png', mimeType: 'image/png', buffer: PNG }]);
+    await p4.waitForSelector('.pmj-files li');
+    assert.deepEqual(await navTxt(), ['← Seznam', 'Hlavní nabídka']);
+    await p4.click('.pmj-navb >> nth=0'); await p4.waitForSelector('.pmj-bot:last-child .pmj-list');
+    await p4.fill('.pmj-list .pmj-row:nth-child(1) .pmj-qty', '500'); await p4.press('.pmj-list .pmj-row:nth-child(1) .pmj-qty', 'Tab');
+    await p4.click('.pmj-list button:has-text("Nacenit seznam")'); await p4.waitForSelector('.pmj-form');
+    assert.match(await p4.textContent('.pmj-qsum'), /500 ks Den Braven Turbo šroub/);
+    assert.equal(await p4.inputValue('.pmj-form textarea'), 'ještě 2 role pásky');
+    assert.equal(await p4.inputValue('.pmj-form input[type=email]'), 'test@example.com');
+    assert.deepEqual(await p4.$$eval('.pmj-files li', a => a.map(x => x.textContent.replace('×', '').trim())), ['vykres.png (1 kB)']);
+    // opakované otevření poptávky (čip i tlačítko) – pořád jeden formulář, jedno tlačítko odeslání, přílohy drží
+    await p4.click('.pmj-navb:has-text("Hlavní nabídka")'); await p4.waitForSelector('.pmj-bot:last-child .pmj-resume');
+    assert.match(await p4.$eval('.pmj-bot:last-child .pmj-resume', e => e.innerText), /Pokračovat: Poptávka/);
+    await p4.click('.pmj-bot:last-child .pmj-chip:has-text("Nacenit seznam nebo fotku")'); await p4.waitForSelector('.pmj-bot:last-child .pmj-form');
+    await p4.click('.pmj-listbtn'); await p4.click('.pmj-bot:last-child .pmj-list button:has-text("Nacenit seznam")');
+    assert.equal(await p4.$$eval('.pmj-form', a => a.length), 1);
+    assert.equal(await p4.$$eval('.pmj-send', a => a.length), 1);
+    assert.equal(await p4.$$eval('#pmj-err', a => a.length), 1);
+    assert.equal(await p4.$$eval('.pmj-files li', a => a.length), 1);
+    assert.equal(await cnt('jarda_quote_start'), 1, 'začátek poptávky se měří jednou');
+    const d = await p4.evaluate(() => JSON.parse(sessionStorage.pmj2_draft));
+    assert.deepEqual([d.t, d.email, d.fn], ['ještě 2 role pásky', 'test@example.com', ['vykres.png']]);
+    assert.ok(!(await p4.evaluate(() => JSON.stringify(localStorage))).includes('test@example.com'));
+  });
+  await step('3.2 zavření a znovuotevření: konverzace i rozepsaná poptávka zůstávají; nová stránka nabídne pokračování', async () => {
+    await p4.click('.pmj-x'); await p4.click('.pmj-fab'); await p4.waitForSelector('.pmj-panel:not([hidden])');
+    assert.equal(await p4.$$eval('.pmj-form', a => a.length), 1);
+    assert.equal(await p4.inputValue('.pmj-form textarea'), 'ještě 2 role pásky');
+    await p4.goto(B + '?page=category'); await openJarda(p4);
+    const r = await p4.$eval('.pmj-resume', e => e.innerText);
+    assert.match(r, /Dokončit rozepsanou poptávku/); assert.match(r, /Poslední hledání: „turbo šroub 7,5x72“/);
+    await p4.click('.pmj-resume button:has-text("Dokončit rozepsanou poptávku")'); await p4.waitForSelector('.pmj-form');
+    assert.equal(await p4.inputValue('.pmj-form textarea'), 'ještě 2 role pásky');
+    assert.match(await p4.textContent('.pmj-files'), /vykres\.png.*vyberte znovu/, 'po načtení nové stránky přílohy prohlížeč neuchová – Jarda to řekne');
+    await p4.click('.pmj-navb:has-text("Změnit volbu")');
+    await p4.click('.pmj-resume button:has-text("Poslední hledání")'); await p4.waitForSelector('.pmj-bot:last-child .pmj-card');
+  });
+  await step('3.2 žádné dvojí odeslání: dvojklik, Zpět a nové vykreslení během odesílání → jeden POST', async () => {
+    await formsubmit(p4, 'ok'); window_log.length = 0;
+    await p4.unroute(/^https:\/\/formsubmit\.co\//);
+    await p4.route(/^https:\/\/formsubmit\.co\//, async r => {
+      const q = r.request(), cors = { 'access-control-allow-origin': '*' };
+      if (q.method() === 'HEAD') return r.fulfill({ status: 200, body: '' });
+      if (q.method() === 'OPTIONS') return r.fulfill({ status: 200, headers: { ...cors, 'access-control-allow-headers': 'Content-Type, Accept' }, body: '' });
+      window_log.push({ url: q.url() });
+      await new Promise(res => setTimeout(res, 1500));
+      r.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: '{"success":"true"}' });
+    });
+    await p4.goto(B + '?page=category&live=1'); await openJarda(p4);
+    await p4.click('.pmj-resume button:has-text("Dokončit rozepsanou poptávku")'); await p4.waitForSelector('.pmj-form');
+    await p4.dblclick('.pmj-send'); await p4.waitForTimeout(150);
+    assert.equal(await p4.$eval('.pmj-send', b => b.disabled), true);
+    await p4.click('.pmj-navb >> nth=0'); await p4.click('.pmj-chip:has-text("Nacenit seznam nebo fotku")'); await p4.waitForSelector('.pmj-form');
+    assert.deepEqual(await p4.$eval('.pmj-send', b => [b.disabled, b.textContent]), [true, 'Odesílám…'], 'nově vykreslený formulář je také zamčený');
+    await p4.click('.pmj-send', { force: true }).catch(() => {});
+    await p4.waitForSelector('.pmj-bot:has-text("jsme přijali")', { timeout: 10000 });
+    assert.equal(window_log.length, 1, 'právě jeden POST');
+    assert.equal(await cnt('jarda_quote_accepted'), 1);
+    assert.equal(await navTxt(), null, 'po přijetí nevede Zpět zpátky do odeslané poptávky');
+    assert.equal(await p4.evaluate(() => sessionStorage.pmj2_draft || null), null);
+  });
+  await step('3.2 žádné dvojí vložení do košíku: dvojklik = jedno volání Shoptetu; po vložení „Pokračovat v nákupu“ a „Zobrazit košík“', async () => {
+    await p4.evaluate(() => { window.__demoCart = []; });
+    await p4.fill('.pmj-q', 'turbo šroub 7,5x92'); await p4.press('.pmj-q', 'Enter');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-card');
+    await p4.click('.pmj-bot:last-child .pmj-card:first-child button:has-text("Do košíku")');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-buy .pmj-qty');
+    await p4.dblclick('.pmj-bot:last-child .pmj-buy button:has-text("Vložit do košíku")');
+    await p4.waitForSelector('.pmj-bot:last-child:has-text("Vloženo do košíku")');
+    assert.deepEqual(await p4.evaluate(() => window.__demoCart), [{ productCode: '8061BD', amount: 1 }]);
+    assert.equal(await p4.evaluate(() => window.__demoSilent), true, 'bez okna Shoptetu „Přidáno do košíku“ (bralo fokus z Jardy)');
+    assert.ok(await p4.$('.pmj-bot:last-child a:has-text("Zobrazit košík")'));
+    await p4.click('.pmj-bot:last-child button:has-text("Pokračovat v nákupu")');
+    await p4.waitForSelector('.pmj-bot:last-child:has-text("našel") .pmj-cards');
+    await p4.click('.pmj-bot:last-child .pmj-card:first-child button:has-text("Do košíku")');
+    await p4.waitForSelector('.pmj-bot:last-child .pmj-buy .pmj-qty');
+    assert.match(await p4.$eval('.pmj-bot:last-child .pmj-buy', e => e.innerText), /Z Jardy už máte v košíku 1 bal\./);
+    assert.equal((await p4.evaluate(() => window.__demoCart)).length, 1);
+  });
+  await step('3.2 nedostupný index: chyba je obrazovka se Zpět, nacenění funguje', async () => {
+    await p4.goto(B + '?page=category&index=broken'); await openJarda(p4);
+    await p4.fill('.pmj-q', 'vrut 5x60'); await p4.press('.pmj-q', 'Enter');
+    await p4.waitForSelector('.pmj-bot:last-child button:has-text("k nacenění")');
+    assert.deepEqual(await navTxt(), ['← Změnit volbu']);
+    await p4.click('.pmj-bot:last-child button:has-text("k nacenění")');
+    const l = await p4.evaluate(() => JSON.parse(localStorage.pmj2_list));
+    assert.deepEqual([l[l.length - 1].n, l[l.length - 1].q], ['vrut 5x60', 0]);
+  });
+  await step('3.2 vložený seznam → Kontrola → Zpět → úprava textu zůstane; přidání jen jednou', async () => {
+    await p4.goto(B + '?page=category'); await openJarda(p4);
+    await p4.evaluate(() => localStorage.removeItem('pmj2_list'));
+    await p4.click('.pmj-chip:has-text("Vložit seznam materiálu")');
+    await p4.fill('.pmj-bot:last-child textarea', 'kramle tesařská 10x200 5 ks\nhmoždinka');
+    await p4.click('button:has-text("Najít v katalogu")'); await p4.waitForSelector('.pmj-imp');
+    await p4.click('.pmj-navb >> nth=0'); await p4.waitForSelector('.pmj-bot:last-child textarea');
+    assert.equal(await p4.inputValue('.pmj-bot:last-child textarea'), 'kramle tesařská 10x200 5 ks\nhmoždinka');
+    await p4.click('button:has-text("Najít v katalogu")'); await p4.waitForSelector('.pmj-bot:last-child .pmj-imp');
+    await p4.click('.pmj-bot:last-child button:has-text("Přidat vše k nacenění")'); await p4.waitForSelector('.pmj-form');
+    await p4.click('.pmj-navb >> nth=0'); await p4.waitForSelector('.pmj-bot:last-child .pmj-imp');
+    assert.equal(await p4.$eval('.pmj-bot:last-child .pmj-btn-primary', b => [b.disabled, b.textContent].join()), 'true,✓ Přidáno');
+    assert.equal((await p4.evaluate(() => JSON.parse(localStorage.pmj2_list))).length, 2);
+  });
+  await step('3.2 přístupnost (axe) s navigací, seznamem a kontrolou poptávky', async () => {
+    await p4.click('.pmj-listbtn'); await p4.waitForSelector('.pmj-bot:last-child .pmj-list');
+    await p4.addScriptTag({ path: require.resolve('axe-core') });
+    const r = await p4.evaluate(() => axe.run('.pmj-panel', { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] }));
+    assert.deepEqual(r.violations.map(v => v.id + ': ' + v.nodes.map(n => n.target.join(' ') + ' ' + (n.any[0] || {}).message).join(' | ')), []);
+  });
+  await c4.close();
+  await step('3.2 mobil (emulace iPhone 13 v Chromiu): navigace nad polem, tlačítka ≥ 44 px, bez vodorovného posunu', async () => {
+    const mc = await br.newContext({ ...devices['iPhone 13'] }); await ctxSetup(mc, errs);
+    const mp = await mc.newPage();
+    await mp.goto(B + '?page=category'); await mp.waitForSelector('.pmj-fab'); await mp.tap('.pmj-fab'); await mp.waitForSelector('.pmj-chip');
+    await mp.tap('.pmj-chip:has-text("Doprava a platba")'); await mp.waitForSelector('.pmj-nav:not([hidden])');
+    const m = await mp.evaluate(() => {
+      const n = document.querySelector('.pmj-nav').getBoundingClientRect(), b = document.querySelector('.pmj-bar').getBoundingClientRect(), r = document.querySelector('.pmj-root').getBoundingClientRect();
+      const small = [...document.querySelectorAll('.pmj-panel button, .pmj-panel a.pmj-btn')].filter(x => x.offsetParent && x.getBoundingClientRect().height < 44 && !x.classList.contains('pmj-linkbtn')).map(x => x.textContent);
+      return { navAbove: n.bottom <= b.top + 1, inView: r.bottom <= innerHeight + 1 && r.top >= 0, sw: document.documentElement.scrollWidth, iw: innerWidth, small };
+    });
+    assert.ok(m.navAbove && m.inView, JSON.stringify(m)); assert.equal(m.sw, m.iw); assert.deepEqual(m.small, []);
+    await mp.tap('.pmj-navb'); await mp.waitForSelector('.pmj-nav[hidden]', { state: 'attached' });
+    if (process.env.SHOTS) await mp.screenshot({ path: process.env.SHOTS + '/e2e-mobile-nav.png' });
+    await mc.close();
   });
   await step('bez chyb JavaScriptu', async () => { assert.deepEqual(errs, []); });
 

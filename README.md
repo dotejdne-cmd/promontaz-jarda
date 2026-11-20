@@ -2,7 +2,7 @@
 
 Lehký průvodce nákupem bez AI a bez placených služeb. Najde materiál v katalogu (fotka, cena s DPH, kód, odkaz), vloží jednoduché produkty do košíku přes Shoptet, sestaví seznam k nacenění a odešle B2B poptávku i s přílohami. Na dotazy k dopravě, platbě, objednávkám a fakturám odpovídá jen texty z configu a odkazy. Nic si nevymýšlí: žádná skladovost, termíny, slevy ani technická doporučení.
 
-**Stav (19. 11. 2026):** zákazníci mají **3.1.1** (kanál `stable`, schváleno majitelem). Rollback: `"stable": "3.0.7"` + `npm run build` + commit do `main`. Viz [Novinky 3.1](#novinky-31).
+**Stav (20. 11. 2026):** vyvíjená verze **3.2.0** (navigace bez slepých uliček), viz [Novinky 3.2](#novinky-32). Kanál `stable` a rollback viz `package.json → jarda.stable`; předchozí produkční verze 3.1.1 (rollback: `"stable": "3.1.1"` + `npm run build` + commit do `main`).
 
 **3.1.1** (oprava proti 3.1.0, chyba byla i v 3.0.7):
 - Poptávka s přílohami spouštěla automatické sledování formulářů v GA4 (`form_start` a `form_submit`, zjištěno živě s funkčním gtag.js). Gtag přepisuje `HTMLFormElement.prototype.submit`, proto se skrytý formulář teď odesílá nativní funkcí z prázdného iframe. Ověřeno skutečnou poptávkou: přijata, 0× `form_*`.
@@ -35,7 +35,7 @@ Zápatí bude mít jediný řádek, **kanál** `dist/stable/jarda.min.js`:
 - `dist/jarda.min.js` a `dist/jarda.css` jsou zmrazená v2 (kontrolní součty v `scripts/build.mjs`). Zdroj v2 je v commitu `1bd35e3` na `main` (lokální tag `v2.0.0`).
 - CI (`.github/workflows/test.yml`) při každém push spustí:
   - jednotkové testy,
-  - build s rozpočty velikosti (zavaděč ≤ 4 kB gzip, aplikace ≤ 16 kB gzip),
+  - build s rozpočty velikosti (zavaděč ≤ 4,1 kB gzip, aplikace ≤ 29 kB gzip – stahuje se až při interakci),
   - kontrolu, že `dist/` odpovídá `src/`,
   - kontrolu, že se zveřejněné verze nezměnily (`check:release`),
   - regresní testy v prohlížeči.
@@ -98,6 +98,29 @@ Zápatí bude mít jediný řádek, **kanál** `dist/stable/jarda.min.js`:
 
 **Osobní údaje.** E-mail, telefon, IČO ani poznámka nikdy nejdou do měření. Hledané výrazy se čistí od e-mailů a telefonních čísel. Kontakt se ukládá jen do `sessionStorage` a po přijetí se maže.
 
+## Novinky 3.2
+
+Zákazník nikdy neuvízne a nic neztratí. Žádné nové chatovací funkce, žádná nová data.
+
+- **Navigace.** Nad polem pro psaní je při každém kroku **← Zpět** (s názvem předchozího kroku, např. „← Výsledky „vrut 5x60““), **← Změnit volbu** (když předchozí krok byla volba v nabídce nebo upřesnění dotazu) a **Hlavní nabídka**. V nabídce je **Pokračovat** – návrat do rozpracované činnosti; po přechodu na jinou stránku webu „Dokončit rozepsanou poptávku“, „Seznam k nacenění (N)“ a „Poslední hledání“.
+  - Model: zásobník logických obrazovek (nejvýš 12) v paměti. Obrazovka se při Zpět jen znovu vykreslí z dat v paměti – nic se znovu nehledá, neověřuje, nevkládá do košíku ani do seznamu, neodesílá ani neměří. Krok, který už v zásobníku je, ho zkrátí (Seznam → Poptávka → Seznam nevytvoří smyčku). `window.history` se nepoužívá.
+  - Produkt z výsledků („Do košíku“) je vlastní krok: ověření balení → Zpět na výsledky. Po vložení do košíku: „Zobrazit košík“, „Pokračovat v nákupu“ (zpět na výsledky), „Hledat další“.
+  - **Upravit hledání** (u výsledků i bez výsledků) vrátí poslední dotaz i s množstvím do pole. Šipka nahoru v prázdném poli totéž.
+- **Poptávka – jeden stav pro celou stránku.** Přílohy jsou v paměti a přežijí Zpět, úpravu seznamu i opakované otevření poptávky (dřív se při každém otevření smazaly). Texty a kontakt se ukládají okamžitě (dřív se zpožděním 400 ms). Zámek odeslání platí i pro znovu vykreslený formulář; „Zkusit přesto odeslat“ po výpadku odešle aktuální formulář. Na stránce je vždy jen jeden formulář. Po přijetí poptávky vede Zpět jen do nabídky.
+  - Životní cyklus: prázdná → rozepsaná → kontrola → odesílá se (zámek) → přijatá (seznam, koncept i přílohy smazány) | nepřijatá / bez odpovědi / výpadek (zámek uvolněn, vše zůstává).
+  - Po načtení jiné stránky prohlížeč soubory neuchová – Jarda to řekne a jmenuje je („vyberte znovu“).
+- **Kontrola před odesláním bez dalšího kroku.** Seznam je ve formuláři jako přehled (množství, název, kód; chybějící počet zvýrazněný) s tlačítkem „Upravit seznam“. Pole pod ním je jen pro doplnění („Další materiál nebo poznámka“). FormSubmit dostává stejné pole „Seznam materiálu“ jako dřív.
+- **Neuvedený počet už není 1 kus.** `r.l.q || 1` a podobné výchozí hodnoty vytvářely falešně potvrzené množství (např. „1× Dotaz: zlatý hřebík 3x50 20 ks“). Teď `q = 0` = „počet neuveden“: v seznamu prázdné zvýrazněné pole, v poptávce „– POČET NEUVEDEN“, v CSV prázdná buňka. Sloučení stejné položky bez počtu nic nepřičte. Řádek vloženého seznamu jde jako text bez množství v názvu a s počtem zvlášť.
+- **Jednotka a balení už u ceny.** Z indexu promontaz-search (pozice 10 a 11): „319 Kč / bal (100 ks) s DPH“, „37 Kč / m“ – stejné pravidlo jako vyhledávání 3.2.0, jen u produktů bez variant a jen když index jednotku zná. Před vložením do košíku Jarda dál ověřuje stránku produktu (noční index ověření nenahrazuje).
+- **Seznam.** Počet se mění i hned v potvrzení „Přidáno do seznamu“ (bez nového hledání). Štítek „produkt KÓD“ vs. „k upřesnění“, souhrn „N položek · u M chybí počet“, odebrání s možností **Vrátit**. Položku, která už v seznamu je, nejde z výsledků přidat znovu („✓ V seznamu“).
+- **Košík bez blokujícího okna.** Shoptet po vložení otevíral okno „Přidáno do košíku“ (rozšířená objednávka), které si bralo fokus klávesnice – do otevřeného Jardy pak nešlo psát (platilo i pro 3.1.1, na mobilu je okno navíc schované pod panelem). Jarda teď volá `addToCart(…, silent = true)`: hlavička košíku i `ShoptetCartUpdated` fungují dál, potvrzení a „Zobrazit košík“ dává Jarda. Nastavení Shoptetu se nemění; při nákupu mimo Jardu se okno zobrazuje jako dřív.
+- **Košík.** Druhé vložení téhož produktu během probíhajícího vložení se ignoruje (dvojklik). Při dalším otevření produktu Jarda řekne „Z Jardy už máte v košíku 1 bal. – další vložení se přičte“.
+- **Vložený seznam.** Rozepsaný text přežije Zpět; „Přidat vše k nacenění“ jde jen jednou. Navržený produkt je označen „Návrh“ (s jednotkou), nezaškrtnutý jde jako text.
+- **Mobil.** Na iOS Safari panel sleduje viditelnou oblast (`visualViewport`), takže pole a tlačítka nejsou pod klávesnicí. Dlouhá obrazovka (výsledky, poptávka) se ukáže od začátku, ne od konce. Všechna tlačítka ≥ 44 px (i „Seznam“ v hlavičce a odkazová tlačítka). Testováno v emulaci iPhone 13 v Chromiu, ne na fyzickém iPhonu.
+- **Přístupnost.** Navigace je `<nav>`; po Zpět dostane fokus nová obrazovka. Primární tlačítka mají tmavší oranžovou (#B85600): bílý text na #E8730C měl kontrast 3,05 : 1, WCAG AA chce 4,5 : 1.
+- **Měření.** Nová událost `jarda_nav` (`nav`: back/home/resume/edit_query, `from`, `to` = typ kroku, např. results/product/quote). Bez dotazu i osobních údajů. `jarda_quote_start` se měří jednou za stránku.
+- Velikost aplikace 27,6 kB gzip (3.1.1: 24,0 kB), stahuje se jen při interakci; zavaděč beze změny (4,03 kB).
+
 ## Novinky 3.1
 
 Zaměřeno na dokončený nákup a kvalitní poptávky, ne na nové chatovací funkce.
@@ -148,6 +171,7 @@ Web nemá GTM, jen gtag.js se skupinou `GA4` (`G-3KY8CWHMHY`) a Google Ads. Jard
 | `jarda_list_export` | `format` (csv/copy), `list_count` |
 | `jarda_calc_click` | `calc`, `from` (chip/search) |
 | `jarda_api_add` | `api_source` (např. kalk-osb), `items_added` |
+| `jarda_nav` (3.2) | `nav` (back/home/resume/edit_query), `from`, `to` (typ kroku) |
 | `jarda_list_view` | `list_count` |
 | `jarda_quote_start` | `list_count`, `quote_source` |
 | `jarda_quote_submit` | `lead_id`, `items_count`, `attachments_count`, `has_zip`, `has_ico`, `quote_source` |
@@ -189,12 +213,13 @@ node test/live/live.cjs
 npm run perf
 ```
 
-- `npm test`: hledání, záměry, množství a seznam, nákupní údaje ze **skutečných stránek produktů** (`test/fixtures/*.html.gz`). 34 testů.
-- `npm run test:e2e`: 47 scénářů v Chromiu nad `demo.html` (desktop a mobil, přístupnost axe-core, bez sítě).
+- `npm test`: hledání, záměry, množství a seznam, nákupní údaje ze **skutečných stránek produktů** (`test/fixtures/*.html.gz`), neuvedený počet a jednotka z indexu. 37 testů.
+- `npm run test:e2e`: 61 scénářů v Chromiu nad `demo.html` (3.2: navigace Zpět/nabídka/pokračovat, přílohy a koncept při přechodech, dvojí odeslání, dvojí vložení do košíku) (desktop a mobil, přístupnost axe-core, bez sítě).
 - `PAGES=1 node test/live/ga4-commands.cjs` (`PAGES=stable` po přepnutí): GA4 na úrovni příkazů gtag na živém webu. Každá akce dává právě 1 událost, vždy `send_to: GA4`, bez osobních údajů a bez duplicity po obnovení. 8 kontrol.
 - `REAL=1 node test/live/quote-real.cjs` (`LOCAL=1` = nenasazená verze, `ONLY=files`): **skutečná** testová poptávka na info@ (předmět „TEST –“, fiktivní telefon), bez přílohy i s přílohami. Kontroluje přijetí, prázdný seznam a 0× `form_*` v GA4. Spouštět jen vědomě.
 - `test/live/channel.cjs` a `consent.cjs` jsou z doby přechodu v2 → kanál. `consent.cjs` potřebuje přístup na googletagmanager.com a google-analytics.com.
 - `node test/live/local.cjs` (`MOBILE=1` pro iPhone, `PAGES=1` = soubory z Pages): **nenasazená** verze z tohoto repa na živém promontaz.cz. Podstrčí se jen v testovacím prohlížeči. Obsahuje ověřený nákup do skutečného košíku Shoptetu (bez objednávky), vložený seznam a dopravu. 8 kontrol.
+- `node test/live/nav.cjs` (`MOBILE=1`, `PAGES=stable`): 3.2 na živém webu – Zpět/Změnit volbu/Hlavní nabídka/Pokračovat, jednotka u ceny, soužití s vyhledáváním webu 3.2 (search-v3). Nic se neodesílá ani nevkládá. 4 kontroly.
 - `node test/live/live.cjs`: 11 kontrol na živém promontaz.cz. Web se nemění, poptávka se neodešle.
 - `node test/live/channel.cjs`: kanál se skutečnými soubory z Pages. Nové Zápatí se simuluje jen v testovacím prohlížeči.
 - `node test/live/consent.cjs`: GA4 před a po souhlasu s cookies (gcs, měřicí ID, nic do Ads, žádné `form_*`, žádné osobní údaje).

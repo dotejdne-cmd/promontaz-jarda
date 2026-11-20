@@ -37,8 +37,8 @@
   }
   dataLayer.push({ shoptet: base });
   // Simulace shoptet.cartShared.addToCart (na webu ji poskytuje Shoptet). Kód FAIL_* simuluje odmítnutí.
-  if (!q.get('nocart')) window.shoptet = { cartShared: { addToCart: function (o) {
-    window.__demoCart = (window.__demoCart || []).concat([o]);
+  if (!q.get('nocart')) window.shoptet = { cartShared: { addToCart: function (o, silent) {
+    window.__demoCart = (window.__demoCart || []).concat([o]); window.__demoSilent = silent;
     if (!/^FAIL/.test(o.productCode)) setTimeout(function () { document.dispatchEvent(new Event('ShoptetCartUpdated')); }, 300);
   } } };
   // jen pro demo: neodesílá se na FormSubmit, rovnou simuluje návrat po odeslání
@@ -86,7 +86,7 @@
 <script>
   // ?ch=1 → načíst přes kanál dist/stable/jarda.min.js (jako v Zápatí); ?both=1 → kanál i přímý řádek v3 (test dvou instancí)
   (function () {
-    var V = q.get('v') || '3.1.1'; // vyvíjená verze (při vydání upravit spolu s package.json; ?v= přepíše)
+    var V = q.get('v') || '3.2.0'; // vyvíjená verze (při vydání upravit spolu s package.json; ?v= přepíše)
     var src = q.get('ch') ? 'dist/stable/jarda.min.js' : 'dist/' + V + '/jarda.min.js';
     [src].concat(q.get('both') ? ['dist/' + V + '/jarda.min.js'] : []).forEach(function (u) { var s = document.createElement('script'); s.src = u; s.defer = true; document.body.appendChild(s); });
   })();

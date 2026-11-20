@@ -139,3 +139,25 @@
 .pmj-root .pmj-imp-none .pmj-imp-q,.pmj-root .pmj-imp-check .pmj-imp-q{color:#8A4B00}
 .pmj-root .pmj-calcs a{font-weight:600}
 .pmj-root textarea.pmj-input{width:100%;font-size:16px}
+/* 3.2: navigace (Zpět / Změnit volbu / Hlavní nabídka), pokračování, kontrola poptávky, neuvedený počet */
+.pmj-root .pmj-nav{display:flex;gap:8px;padding:8px 12px 0;background:#fff;border-top:1px solid var(--pmj-line)}
+.pmj-root .pmj-nav+.pmj-bar{border-top:0}
+.pmj-root .pmj-navb{flex:1 1 auto;min-width:0;min-height:44px;padding:8px 12px;border:1.5px solid var(--pmj-line);border-radius:8px;background:#fff;color:var(--pmj-t);font-size:14px;font-weight:600;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pmj-root .pmj-navb:hover{border-color:var(--pmj-t)}
+.pmj-root .pmj-navh{flex:0 0 auto;text-align:center}
+.pmj-root .pmj-msg:focus:not(:focus-visible){outline:none!important}
+.pmj-root .pmj-resume{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:10px;background:#fff}
+.pmj-root .pmj-qsum{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--pmj-line);border-radius:8px;background:#fff}
+.pmj-root .pmj-qsum .pmj-ul{font-size:13px}
+.pmj-root .pmj-warn{color:#8A4B00!important}
+.pmj-root .pmj-row-name a{color:var(--pmj-t)!important}
+.pmj-root .pmj-row-name{display:flex;flex-direction:column;gap:2px}
+.pmj-root .pmj-tag{align-self:flex-start;display:inline-block;padding:1px 6px;border-radius:4px;background:var(--pmj-gh);color:var(--pmj-g);font-size:11px;font-weight:600;line-height:1.5}
+.pmj-root .pmj-tag-q{background:#FFF4EA;color:#8A4B00}
+.pmj-root .pmj-row-noq .pmj-qty{border-color:#C77700;background:#FFF9F2}
+.pmj-root .pmj-qty::placeholder{color:#8A4B00;opacity:1;font-size:13px}
+.pmj-root .pmj-added{margin-top:8px}
+@media (max-width:599px){.pmj-root .pmj-chip,.pmj-root .pmj-linkbtn,.pmj-root .pmj-listbtn{min-height:44px}.pmj-root .pmj-linkbtn{padding:6px 0}}
+/* 3.2: bílý text na oranžové měl kontrast 3,05 : 1 (WCAG AA chce 4,5 : 1) → tmavší oranžová jen pod textem tlačítek */
+.pmj-root .pmj-btn-primary,.pmj-root .pmj-chip-hot{background:#B85600;border-color:#B85600}
+.pmj-root .pmj-btn-primary:hover,.pmj-root .pmj-chip-hot:hover{background:#A34C00;border-color:#A34C00}
