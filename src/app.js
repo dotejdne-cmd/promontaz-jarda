@@ -390,7 +390,7 @@ window.__pmjApp = function (X) {
   /* detail = karta na obrazovce produktu (s ověřeným nákupem), jinak karta ve výsledcích */
   function card(it, pos, q, source, req, detail) {
     var has = inList(it);
-    var add = h('button', { type: 'button', class: 'pmj-btn pmj-add ' + (detail ? 'pmj-btn-ghost' : 'pmj-btn-primary'), // u produktu je hlavní akce nákup text: has ? '✓ V seznamu' : '+ k nacenění', disabled: has, 'aria-label': has ? 'V seznamu: ' + it.n : 'Přidat k nacenění: ' + it.n });
+    var add = h('button', { type: 'button', class: 'pmj-btn pmj-add ' + (detail ? 'pmj-btn-ghost' : 'pmj-btn-primary') /* u produktu je hlavní akce nákup */, text: has ? '✓ V seznamu' : '+ k nacenění', disabled: has, 'aria-label': has ? 'V seznamu: ' + it.n : 'Přidat k nacenění: ' + it.n });
     add.addEventListener('click', function () {
       if (inList(it)) { add.textContent = '✓ V seznamu'; add.disabled = true; return; }
       var x = { n: it.n, c: it.c, u: it.u, q: req && req.q || 0, un: req && req.unit || '' };
