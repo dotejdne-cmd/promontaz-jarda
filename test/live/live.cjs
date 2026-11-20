@@ -80,7 +80,8 @@ async function ask(pg, t) { await pg.fill('.pmj-q', t); await pg.press('.pmj-q',
     const intro = await pg.$eval('.pmj-bot', e => e.innerText);
     assert.match(intro, /Do minimální objednávky chybí|Velký nákup/);
     await pg.click('.pmj-chip:has-text("Poslat košík k nacenění")'); await pg.waitForSelector('.pmj-form');
-    assert.match(await pg.inputValue('.pmj-form textarea'), /\(kód /);
+    if (V.localeCompare('3.2.0', undefined, { numeric: true }) >= 0) assert.match(await pg.textContent('.pmj-form .pmj-qsum'), /Seznam k nacenění[\s\S]*\([A-Z]{2}_\d+\)/); // 3.2: kontrola seznamu nad polem
+    else assert.match(await pg.inputValue('.pmj-form textarea'), /\(kód /);
   });
   await step('montážní sada: komponenty podle SKU z popisu', async () => {
     await pg.goto('https://www.promontaz.cz/montazni-sady/sada-tesarske-kovani---1-000-vrutu-4-8--35-40-bit-tx20/');
